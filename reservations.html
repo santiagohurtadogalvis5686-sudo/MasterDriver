@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MasterDriver | Reservas</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+<header class="navbar">
+
+    <a href="index.html" class="logo">
+        MASTER<span>DRIVER</span>
+    </a>
+
+    <nav class="nav-links">
+        <a href="index.html">Inicio</a>
+        <a href="catalog.html">Catálogo</a>
+        <a href="my-publications.html">Mis Publicaciones</a>
+        <a href="publish.html">Publicar vehículo</a>
+        <a href="profile.html">Perfil</a>
+        <a href="reservations.html" class="active">Reservaciones</a>
+    </nav>
+
+    <button id="logoutButton" class="btn btn-secondary" type="button">
+        Cerrar sesión
+    </button>
+
+</header>
+
+<main class="page-container">
+
+    <section class="page-header">
+
+        <span class="section-label">
+            PANEL
+        </span>
+
+        <h1>
+            Mis reservas
+        </h1>
+
+        <p>
+            Consulta las solicitudes y reservas realizadas.
+        </p>
+
+    </section>
+
+    <div id="reservationAlertContainer"></div>
+
+    <section class="dashboard-stats">
+
+        <div class="stat-card">
+            <span>Reservas Activas</span>
+            <strong id="totalReservations">0</strong>
+        </div>
+
+        <div class="stat-card">
+            <span>Pendientes</span>
+            <strong id="pendingReservations">0</strong>
+        </div>
+
+        <div class="stat-card">
+            <span>Confirmadas</span>
+            <strong id="confirmedReservations">0</strong>
+        </div>
+
+    </section>
+
+    <section
+        id="reservationFormSection"
+        class="reservation-list"
+        hidden
+    >
+
+        <div class="section-heading-small">
+            <h2>Confirmar reserva</h2>
+        </div>
+
+        <p id="selectedVehicleInfo"></p>
+
+        <p id="selectedAvailability"></p>
+
+        <p id="reservationTotal">
+            Total estimado: $0
+        </p>
+
+        <p id="reservationFormMessage"></p>
+
+        <button
+            id="confirmReservationButton"
+            class="btn btn-primary"
+            type="button"
+        >
+            Confirmar reserva
+        </button>
+
+        <a href="catalog.html" class="btn btn-secondary">
+            Cancelar
+        </a>
+
+    </section>
+
+    <section class="reservation-list">
+
+        <div class="section-heading-small">
+            <h2>Actividad reciente</h2>
+        </div>
+
+        <div id="reservationContainer">
+            Cargando reservas...
+        </div>
+
+    </section>
+
+</main>
+
+<script src="js/app.js"></script>
+<script src="js/reservations.js"></script>
+
+</body>
+</html>

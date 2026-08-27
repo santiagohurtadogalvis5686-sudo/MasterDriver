@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+
+# Base de datos SQLite
+*.db
+*.db-journal
+
+# Archivos cargados por usuarios
+uploads/vehicles/*
+uploads/documents/*
+!uploads/vehicles/.gitkeep
+!uploads/documents/.gitkeep
+
+# Logs y entorno
+*.log
+.env

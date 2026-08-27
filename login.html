@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MasterDriver - Iniciar Sesión</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body class="auth-body">
+    <main class="auth-container">
+        <section class="auth-card">
+            <div class="auth-header">
+                <h1>MASTER <span>DRIVER</span></h1>
+                <p>Inicia sesión para continuar</p>
+            </div>
+
+            <div id="mensaje" class="auth-message" hidden></div>
+
+            <form id="loginForm" novalidate>
+                <div class="form-group">
+                    <label for="loginCorreo">Correo electrónico</label>
+                    <input
+                        type="email"
+                        id="loginCorreo"
+                        name="correo"
+                        placeholder="correo@ejemplo.com"
+                        autocomplete="email"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="loginPassword">Contraseña</label>
+                    <input
+                        type="password"
+                        id="loginPassword"
+                        name="password"
+                        placeholder="Ingresa tu contraseña"
+                        autocomplete="current-password"
+                        required
+                    >
+                </div>
+
+                <button type="submit" id="btnLogin" class="btn btn-primary">
+                    Iniciar Sesión
+                </button>
+            </form>
+
+            <div class="auth-separator">
+                <span>¿No tienes una cuenta?</span>
+            </div>
+
+            <form id="registerForm" novalidate>
+                <div class="form-group">
+                    <label for="registerNombre">Nombre</label>
+                    <input
+                        type="text"
+                        id="registerNombre"
+                        name="nombre"
+                        placeholder="Tu nombre"
+                        autocomplete="name"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="registerCorreo">Correo electrónico</label>
+                    <input
+                        type="email"
+                        id="registerCorreo"
+                        name="correo"
+                        placeholder="correo@ejemplo.com"
+                        autocomplete="email"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="registerPassword">Contraseña</label>
+                    <input
+                        type="password"
+                        id="registerPassword"
+                        name="password"
+                        placeholder="Mínimo 6 caracteres"
+                        autocomplete="new-password"
+                        minlength="6"
+                        required
+                    >
+                </div>
+
+                <button type="submit" id="btnRegister" class="btn btn-primary">
+                    Crear Cuenta
+                </button>
+            </form>
+
+            <div class="auth-footer">
+                <a href="index.html">Volver al inicio</a>
+            </div>
+        </section>
+    </main>
+
+    <script src="js/login.js" defer></script>
+</body>
+
+</html>

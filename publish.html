@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Publicar vehículo - MasterDriver</title>
+    <!-- Rutas de estilos -->
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <header class="navbar">
+        <a href="index.html" class="logo">
+            MASTER<span>DRIVER</span>
+        </a>
+
+        <nav class="nav-links">
+            <a href="index.html">Inicio</a>
+            <a href="catalog.html">Catálogo</a>
+            <a href="my-publications.html">Mis Publicaciones</a>
+            <a href="publish.html" class="active">Publicar vehículo</a>
+            <a href="profile.html" >Perfil</a>
+            <a href="reservations.html" >Reservaciones</a>
+        </nav>
+
+        <button class="btn btn-primary" onclick="cerrarSesion()">
+            Cerrar sesión
+        </button>
+    </header>
+
+    <main class="page-container">
+
+        <div class="publish-header-container">
+            <h1>Publicar vehículo</h1>
+        </div>
+
+        <form id="publishForm" enctype="multipart/form-data">
+
+            <label>
+                Título
+                <input type="text" id="titulo" name="titulo" placeholder="Ej: Honda CB 125F" required>
+            </label>
+
+            <label>
+                Tipo
+                <select id="tipo" name="tipo" required>
+                    <option value="">Seleccionar</option>
+                    <option value="moto">Moto</option>
+                    <option value="carro">Carro</option>
+                </select>
+            </label>
+
+            <label>
+                Marca
+                <input type="text" id="marca" name="marca" required>
+            </label>
+
+            <label>
+                Modelo
+                <input type="text" id="modelo" name="modelo" required>
+            </label>
+
+            <label>
+                Precio por hora
+                <input type="number" id="precio" name="precio" min="0" required>
+            </label>
+
+            <label>
+                Descripción
+                <textarea id="descripcion" name="descripcion" rows="5"></textarea>
+            </label>
+
+            <!-- ============================= -->
+            <!-- FOTOGRAFÍAS -->
+            <!-- ============================= -->
+
+            <h2>Fotografías</h2>
+
+            <label>
+                Subir fotografías
+                <input type="file" id="fotografias" name="fotografias" accept="image/jpeg,image/png,image/webp" multiple>
+            </label>
+
+            <label>
+               Número de WhatsApp / Contacto
+                <input type="tel" id="whatsapp" name="whatsapp" placeholder="Ej: +57 3001234567" required>
+            </label>
+
+            <!-- ============================= -->
+            <!-- DISPONIBILIDAD -->
+            <!-- ============================= -->
+
+            <h2>Disponibilidad</h2>
+
+            <label>
+                Hora inicial
+                <input type="time" id="hora_inicio" name="disponibilidad_hora_inicio" required>
+            </label>
+
+            <label>
+                Hora final
+                <input type="time" id="hora_fin" name="disponibilidad_hora_fin" required>
+            </label>
+
+            <p style="font-weight: 600; font-size: 14px; margin-top: 10px;">Días disponibles</p>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="lunes">
+                Lunes
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="martes">
+                Martes
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="miercoles">
+                Miércoles
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="jueves">
+                Jueves
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="viernes">
+                Viernes
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="sabado">
+                Sábado
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="dias" value="domingo">
+                Domingo
+            </label>
+
+            <label>
+                Fecha inicial de disponibilidad
+                <input type="date" id="fecha_inicio" name="fecha_inicio" required>
+            </label>
+
+            <label>
+                Fecha final de disponibilidad
+                <input type="date" id="fecha_fin" name="fecha_fin" required>
+            </label>
+
+            <!-- ============================= -->
+            <!-- DOCUMENTOS -->
+            <!-- ============================= -->
+
+            <h2>Documentos</h2>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="soat" value="true">
+                SOAT vigente
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="tecnomecanica" value="true">
+                Tecnomecánica vigente
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" id="tarjeta" value="true">
+                Tarjeta de propiedad
+            </label>
+
+            <label>
+                Cargar documentos
+                <input type="file" id="documentos_archivos" name="documentos_archivos" multiple>
+            </label>
+
+            <!-- ============================= -->
+            <!-- CONDICIONES -->
+            <!-- ============================= -->
+
+            <h2>Condiciones de uso</h2>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="condiciones" value="No mascotas">
+                No mascotas
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="condiciones" value="Devolver con tanque lleno">
+                Devolver con tanque lleno
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="condiciones" value="Licencia vigente obligatoria">
+                Licencia vigente obligatoria
+            </label>
+
+            <label class="checkbox-label">
+                <input type="checkbox" name="condiciones" value="No fumar">
+                No fumar
+            </label>
+
+            <label>
+                Otras condiciones
+                <textarea id="otras_condiciones" rows="4" placeholder="Una condición por línea"></textarea>
+            </label>
+
+            <button type="submit" class="btn btn-primary">
+                Publicar vehículo
+            </button>
+
+        </form>
+
+    </main>
+
+    <script src="js/app.js"></script>
+    <script src="js/publish.js"></script>
+
+</body>
+
+</html>

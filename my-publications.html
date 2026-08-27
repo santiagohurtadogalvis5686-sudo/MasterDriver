@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mis Publicaciones - MasterDriver</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <header class="navbar">
+        <a href="index.html" class="logo">MASTER<span>DRIVER</span></a>
+
+        <nav class="nav-links">
+            <a href="index.html">Inicio</a>
+            <a href="catalog.html">Catálogo</a>
+            <a href="my-publications.html" class="active">Mis Publicaciones</a>
+            <a href="publish.html">Publicar vehículo</a>
+            <a href="profile.html" >Perfil</a>
+            <a href="reservations.html">Reservaciones</a>
+        </nav>
+
+        <button class="btn btn-primary" onclick="cerrarSesion()">
+            Cerrar sesión
+        </button>
+    </header>
+
+    <main class="page-container">
+        <div class="page-header">
+            <h1>Mis Publicaciones</h1>
+            <p>Gestiona y edita los vehículos que has publicado.</p>
+        </div>
+
+        <div
+            id="myCatalogContainer"
+            style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px;"
+        ></div>
+
+        <p id="myCatalogMessage">
+            Cargando mis publicaciones...
+        </p>
+
+        <section class="reservation-list" style="margin-top: 40px;">
+            <div class="section-heading-small">
+                <h2>Solicitudes de reserva recibidas</h2>
+            </div>
+
+            <div id="ownerReservationsContainer">
+                Cargando solicitudes...
+            </div>
+        </section>
+
+        <div
+            id="editModal"
+            style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; justify-content: center; align-items: center;"
+        >
+            <form
+                id="editForm"
+                class="auth-card"
+                style="width: 100%; max-width: 500px;"
+            >
+                <h2>Editar Publicación</h2>
+
+                <input type="hidden" id="edit-id">
+
+                <div class="form-group">
+                    <label>Título</label>
+                    <input type="text" id="edit-titulo" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Marca</label>
+                    <input type="text" id="edit-marca" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Modelo</label>
+                    <input type="text" id="edit-modelo" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Precio por hora</label>
+                    <input type="number" id="edit-precio" required>
+                </div>
+
+                <div class="form-group">
+                    <label>WhatsApp</label>
+                    <input type="text" id="edit-whatsapp" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Descripción</label>
+                    <textarea id="edit-descripcion" rows="3"></textarea>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button type="submit" class="btn btn-primary btn-full">
+                        Guardar cambios
+                    </button>
+
+                    <button
+                        type="button"
+                        class="btn btn-secondary btn-full"
+                        onclick="cerrarModal()"
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script src="js/app.js"></script>
+    <script src="js/my-publications.js"></script>
+</body>
+</html>

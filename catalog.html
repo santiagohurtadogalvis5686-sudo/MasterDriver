@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo - MasterDriver</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <header class="navbar">
+        <a href="index.html" class="logo">
+            MASTER<span>DRIVER</span>
+        </a>
+
+        <nav class="nav-links">
+            <a href="index.html">Inicio</a>
+            <a href="catalog.html" class="active">Catálogo</a>
+            <a href="my-publications.html">Mis Publicaciones</a>
+            <a href="publish.html">Publicar vehículo</a>
+            <a href="profile.html">Perfil</a>
+            <a href="reservations.html">Reservaciones</a>
+        </nav>
+
+        <button class="btn btn-primary" onclick="cerrarSesion()">
+            Cerrar sesión
+        </button>
+    </header>
+
+    <main class="page-container">
+        <h2 class="catalog-title">Vehículos disponibles</h2>
+
+        <!-- BARRA DE BÚSQUEDA -->
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <span class="search-icon">🔍</span>
+                <input 
+                    type="text" 
+                    id="searchInput" 
+                    placeholder="Buscar por marca, modelo o descripción..." 
+                    autocomplete="off"
+                >
+            </div>
+        </div>
+
+        <!-- MENSAJE DE ESTADO Y CONTADOR (Ubicado arriba de la cuadrícula) -->
+        <p id="catalogMessage">
+            Cargando vehículos...
+        </p>
+
+        <!-- CONTENEDOR DE TARJETAS -->
+        <div id="catalogContainer"></div>
+    </main>
+
+    <script src="js/app.js"></script>
+    <script src="js/catalog.js"></script>
+
+</body>
+
+</html>

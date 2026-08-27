@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perfil de Usuario | MasterDriver</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <nav class="navbar">
+        <div class="logo">Master<span>Driver</span></div>
+
+        <div class="nav-links">
+            <a href="index.html">Inicio</a>
+            <a href="catalog.html">Catálogo</a>
+            <a href="my-publications.html">Mis Publicaciones</a>
+            <a href="publish.html">Publicar vehículo</a>
+            <a href="profile.html" class="active">Perfil</a>
+            <a href="reservations.html">Reservaciones</a>
+        </div>
+
+        <button id="btnLogout" class="btn btn-secondary" type="button">
+            Cerrar Sesión
+        </button>
+    </nav>
+
+    <main class="page-container profile-container">
+        <header class="page-header profile-header">
+            <div class="profile-avatar">
+                <span id="avatarInitials">U</span>
+            </div>
+
+            <div>
+                <h1 id="profileHeaderName">Cargando...</h1>
+                <p id="profileHeaderEmail"></p>
+            </div>
+        </header>
+
+        <form id="profileForm" class="profile-card" novalidate>
+            <section class="profile-section">
+                <h2>Datos de la cuenta</h2>
+
+                <div class="form-group">
+                    <label for="profileName">Nombre completo</label>
+                    <input
+                        type="text"
+                        id="profileName"
+                        name="nombre"
+                        placeholder="Tu nombre"
+                        autocomplete="name"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="profileEmail">Correo electrónico</label>
+                    <input
+                        type="email"
+                        id="profileEmail"
+                        name="correo"
+                        placeholder="tu@correo.com"
+                        autocomplete="email"
+                        required
+                    >
+                </div>
+
+                <p class="profile-help">
+                    Por seguridad, la contraseña no se muestra ni se almacena en el navegador.
+                </p>
+            </section>
+
+            <div id="profileMessage" class="auth-message" style="display: none;"></div>
+
+            <button type="submit" class="btn btn-primary btn-full">
+                Guardar cambios
+            </button>
+        </form>
+    </main>
+
+    <script src="js/profile.js" defer></script>
+</body>
+
+</html>
