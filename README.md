@@ -91,70 +91,14 @@ Archivo de base de datos: masterdriver.db (creado en la raíz del proyecto).
 
 Ubicación del esquema SQL: database/schema.sql
 
-Tablas principales
-users
+## Tablas principales
+users: id, nombre, correo, password_hash, telefono, rol, fecha_registro
 
-id (INTEGER, PK, AUTOINCREMENT)
+sessions: id, user_id, token, fecha_inicio, estado
 
-nombre (TEXT)
+vehicles: id, user_id, titulo, tipo, marca, modelo, precio, whatsapp, descripcion, fotografias, disponibilidad, documentos, condiciones_uso, fecha_creacion
 
-correo (TEXT, UNIQUE)
-
-password_hash (TEXT)
-
-telefono (TEXT)
-
-rol (TEXT, DEFAULT 'usuario')
-
-fecha_registro (DATETIME)
-
-sessions
-
-id (INTEGER, PK, AUTOINCREMENT)
-
-user_id (INTEGER, FK -> users.id)
-
-token (TEXT, UNIQUE)
-
-fecha_inicio (DATETIME)
-
-estado (TEXT, DEFAULT 'activa')
-
-vehicles
-
-id (INTEGER, PK, AUTOINCREMENT)
-
-user_id (INTEGER, FK -> users.id)
-
-titulo, tipo, marca, modelo (TEXT)
-
-precio (REAL)
-
-whatsapp, descripcion (TEXT)
-
-fotografias, disponibilidad, documentos, condiciones_uso (TEXT - Formato JSON)
-
-fecha_creacion (DATETIME)
-
-reservations
-
-id (INTEGER, PK, AUTOINCREMENT)
-
-user_id (INTEGER, FK -> users.id)
-
-vehicle_id (INTEGER, FK -> vehicles.id)
-
-fecha_inicio, fecha_fin (TEXT)
-
-estado (TEXT, DEFAULT 'pendiente')
-
-total_pago (REAL)
-
-fecha_creacion (DATETIME)
-
-Poblado de datos iniciales (Seed)
-
-El ejecutable seed.js borra los datos existentes, inicializa el esquema, crea una cuenta de administrador por defecto y carga 20 vehículos de prueba (motos y carros).
+reservations: id, user_id, vehicle_id, fecha_inicio, fecha_fin, estado, total_pago, fecha_creacion
 
 ## Ejecución:
 
@@ -289,7 +233,7 @@ npm start: Inicia el servidor de producción ejecutando node server.js.
 
 npm run dev: Inicia el servidor en modo desarrollo utilizando nodemon.
 
-npm run seed: Borra y vuelve a generar la base de datos con información e imágenes de prueba.
+npm run seed: Inicializa la estructura de la base de datos.
 
 ## 🐛 Solución de problemas
 Error EADDRINUSE: address already in use :::3000:
@@ -303,7 +247,5 @@ Verifica que existan los directorios uploads/vehicles/ y uploads/documents/. El 
 
 ## 🔒 Seguridad
 Recomendaciones para preparar el repositorio antes de subir a GitHub:
-
-Credenciales del Seed: El script seed.js crea por defecto un usuario administrador con la contraseña en texto plano en el archivo (admin@masterdriver.com / 123456). Cambia o protege este valor antes de publicar en entornos de producción.
 
 Archivos Binarios y Subidas: Es recomendable no incluir el archivo de la base de datos local masterdriver.db ni las imágenes subidas por usuarios en los commits de Git.
