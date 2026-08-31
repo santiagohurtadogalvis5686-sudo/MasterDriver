@@ -5,73 +5,36 @@ function obtenerToken() {
 }
 
 function obtenerUsuario() {
-
-    const usuario =
-        localStorage.getItem(
-            "masterdriver_usuario"
-        );
-
-    return usuario
-        ? JSON.parse(usuario)
-        : null;
+    const usuario = localStorage.getItem("masterdriver_usuario");
+    return usuario ? JSON.parse(usuario) : null;
 }
 
 function guardarSesion(data) {
-
-    localStorage.setItem(
-        "masterdriver_token",
-        data.token
-    );
-
-    localStorage.setItem(
-        "masterdriver_usuario",
-        JSON.stringify(data.usuario)
-    );
+    if (data.token) {
+        localStorage.setItem("masterdriver_token", data.token);
+    }
+    const usuarioParaGuardar = data.user || data.usuario;
+    if (usuarioParaGuardar) {
+        localStorage.setItem(
+            "masterdriver_usuario",
+            JSON.stringify(usuarioParaGuardar)
+        );
+    }
 }
 
 function cerrarSesion() {
-
-    const token =
-        obtenerToken();
-
-    if (token) {
-
-        fetch(
-            `${API_URL}/auth/logout`,
-            {
-                method: "POST",
-
-                headers: {
-                    Authorization:
-                        `Bearer ${token}`
-                }
-            }
-        );
-    }
-
-    localStorage.removeItem(
-        "masterdriver_token"
-    );
-
-    localStorage.removeItem(
-        "masterdriver_usuario"
-    );
-
-    window.location.href =
-        "login.html";
+    localStorage.removeItem("masterdriver_token");
+    localStorage.removeItem("masterdriver_usuario");
+    window.location.href = "login.html";
 }
 
 function headersAuth() {
-
     return {
-        Authorization:
-            `Bearer ${obtenerToken()}`
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${obtenerToken()}`
     };
 }
 
 function usuarioAutenticado() {
-
-    return Boolean(
-        obtenerToken()
-    );
+    return Boolean(obtenerToken());
 }

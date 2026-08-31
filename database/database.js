@@ -145,7 +145,12 @@ async function initializeDatabase() {
         await exec(schema);
 
         // Migraciones para bases existentes.
-        // El middleware de autenticación consulta users.telefono.
+        await ensureColumn(
+            "users",
+            "password",
+            "password TEXT"
+        );
+
         await ensureColumn(
             "users",
             "telefono",
@@ -153,9 +158,27 @@ async function initializeDatabase() {
         );
 
         await ensureColumn(
+            "users",
+            "licencia_frente",
+            "licencia_frente TEXT"
+        );
+
+        await ensureColumn(
+            "users",
+            "licencia_reverso",
+            "licencia_reverso TEXT"
+        );
+
+        await ensureColumn(
             "vehicles",
             "whatsapp",
             "whatsapp TEXT"
+        );
+
+        await ensureColumn(
+            "reservations",
+            "editado_por_cliente",
+            "editado_por_cliente INTEGER DEFAULT 0"
         );
 
         console.log(

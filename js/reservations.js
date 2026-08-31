@@ -42,7 +42,6 @@ async function iniciarPaginaReservas() {
     await cargarReservas();
     await cargarVehiculoSeleccionado();
 
-    // Actualizar la interfaz cada 10 segundos para verificar la expiración en backend
     if (expirationCheckInterval) {
         clearInterval(expirationCheckInterval);
     }
@@ -461,6 +460,10 @@ async function cargarReservas() {
                 const estadoReserva = (reservation.estado || "pendiente").toLowerCase();
                 const estadoClase = `badge-status badge-${estadoReserva}`;
 
+                // Reglas actualizadas:
+                // Solo se puede EDITAR si la reserva está 'pendiente'
+                const sePuedeEditar = estadoReserva === "pendiente";
+                // Se puede CANCELAR si está 'pendiente' o 'confirmada'
                 const sePuedeCancelar = estadoReserva === "pendiente" || estadoReserva === "confirmada";
 
                 element.innerHTML = `
@@ -481,27 +484,64 @@ async function cargarReservas() {
                         <strong>Fin:</strong> ${formatearFecha(reservation.fecha_fin)}
                     </p>
 
-                    <div class="reservation-card-footer">
+                    ${
+                        sePuedeEditar
+                            ? `
+                                <div id="form-edit-${reservation.id}" class="edit-reservation-form" hidden style="margin-top: 10px; padding: 10px; border-top: 1px solid #ccc;">
+                                    <label>Nueva fecha inicio:
+                                        <input type="datetime-local" id="edit-inicio-${reservation.id}" value="${reservation.fecha_inicio ? reservation.fecha_inicio.slice(0, 16) : ''}">
+                                    </label>
+                                    <br>
+                                    <label>Nueva fecha fin:
+                                        <input type="datetime-local" id="edit-fin-${reservation.id}" value="${reservation.fecha_fin ? reservation.fecha_fin.slice(0, 16) : ''}">
+                                    </label>
+                                    <br>
+                                    <button type="button" class="btn btn-primary" onclick="guardarEdicionReserva(${reservation.id})">Guardar cambios</button>
+                                    <button type="button" class="btn btn-secondary" onclick="alternarModoEdicion(${reservation.id})">Cancelar</button>
+                                </div>
+                              `
+                            : ''
+                    }
+
+                    <div class="reservation-card-footer" style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                         <strong class="reservation-total">
                             Total: $${total.toLocaleString("es-CO")}
                         </strong>
 
                         ${
+                            sePuedeEditar
+                                ? `
+                                    <button 
+                                        type="button" 
+                                        class="btn btn-warning btn-edit-res" 
+                                        onclick="alternarModoEdicion(${reservation.id})"
+                                    >
+                                        Editar fechas
+                                    </button>
+                                  `
+                                : ''
+                        }
+
+                        ${
                             sePuedeCancelar
-                                ? `<button 
+                                ? `
+                                    <button 
                                         type="button" 
                                         class="btn btn-danger btn-cancel-res" 
                                         onclick="cancelarReserva(${reservation.id})"
                                     >
                                         Cancelar reserva
-                                   </button>`
-                                : `<button 
+                                    </button>
+                                  `
+                                : `
+                                    <button 
                                         type="button" 
                                         class="btn btn-secondary" 
                                         disabled
                                     >
                                         ${escaparHtml(reservation.estado)}
-                                   </button>`
+                                    </button>
+                                  `
                         }
                     </div>
                 `;
@@ -521,6 +561,51 @@ async function cargarReservas() {
 
         container.innerHTML =
             "<p>Error conectando con el servidor.</p>";
+    }
+}
+
+async function guardarEdicionReserva(reservationId) {
+    const inputInicio = document.querySelector(`#edit-inicio-${reservationId}`);
+    const inputFin = document.querySelector(`#edit-fin-${reservationId}`);
+
+    if (!inputInicio || !inputFin || !inputInicio.value || !inputFin.value) {
+        mostrarNotificacion("Debes seleccionar ambas fechas.", "error");
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/reservations/${encodeURIComponent(reservationId)}`, {
+            method: "PUT",
+            headers: {
+                ...headersAuth(),
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                fecha_inicio: inputInicio.value,
+                fecha_fin: inputFin.value
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            mostrarNotificacion(data.mensaje || "Error actualizando la reserva.", "error");
+            if (response.status === 401) cerrarSesion();
+            return;
+        }
+
+        mostrarNotificacion("Reserva actualizada con éxito.", "success");
+        await cargarReservas();
+    } catch (error) {
+        console.error("Error al editar reserva:", error);
+        mostrarNotificacion("Error de conexión al intentar actualizar la reserva.", "error");
+    }
+}
+
+function alternarModoEdicion(reservationId) {
+    const editForm = document.querySelector(`#form-edit-${reservationId}`);
+    if (editForm) {
+        editForm.hidden = !editForm.hidden;
     }
 }
 
@@ -575,6 +660,25 @@ async function cancelarReserva(reservationId) {
             "Error de conexión al intentar cancelar la reserva.",
             "error"
         );
+    }
+}
+
+// Función auxiliar para que los propietarios puedan abrir las licencias de sus clientes
+async function abrirLicenciaPropietario(urlDocumento) {
+    const token = localStorage.getItem("masterdriver_token");
+    try {
+        const res = await fetch(urlDocumento, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+            alert("No fue posible cargar el documento o no tienes autorización.");
+            return;
+        }
+        const blob = await res.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        window.open(blobUrl, "_blank");
+    } catch (err) {
+        alert("Error al intentar abrir el documento.");
     }
 }
 

@@ -66,15 +66,76 @@
                     >
                 </div>
 
+                <div class="form-group">
+                    <label for="profilePhone">Teléfono de contacto</label>
+                    <input
+                        type="tel"
+                        id="profilePhone"
+                        name="telefono"
+                        placeholder="+57 300 000 0000"
+                        autocomplete="tel"
+                    >
+                </div>
+
                 <p class="profile-help">
                     Por seguridad, la contraseña no se muestra ni se almacena en el navegador.
                 </p>
             </section>
 
+            <!-- Sección de Licencia de Conducir -->
+            <section class="profile-section license-section">
+                <h2>Licencia de Conducir</h2>
+                <p class="profile-help">
+                    Sube la parte frontal y posterior de tu documento para poder realizar reservas de vehículos.
+                </p>
+
+                <div class="license-grid">
+                    <!-- Tarjeta Frente -->
+                    <div class="license-card">
+                        <h3>Parte Frontal</h3>
+                        <div id="containerFrente" class="license-preview-box">
+                            <span class="preview-placeholder">Sin documento subido</span>
+                            <img id="imgPreviewFrente" src="" alt="Frente de la Licencia" hidden>
+                        </div>
+                        <div class="license-actions">
+                            <input type="file" id="inputFileFrente" accept="image/*,.pdf" style="display: none;">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputFileFrente').click()">
+                                Seleccionar Frente
+                            </button>
+                            <button type="button" id="btnDeleteFrente" class="btn btn-danger btn-small" style="display: none;">
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Tarjeta Reverso -->
+                    <div class="license-card">
+                        <h3>Parte Reverso</h3>
+                        <div id="containerReverso" class="license-preview-box">
+                            <span class="preview-placeholder">Sin documento subido</span>
+                            <img id="imgPreviewReverso" src="" alt="Reverso de la Licencia" hidden>
+                        </div>
+                        <div class="license-actions">
+                            <input type="file" id="inputFileReverso" accept="image/*,.pdf" style="display: none;">
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('inputFileReverso').click()">
+                                Seleccionar Reverso
+                            </button>
+                            <button type="button" id="btnDeleteReverso" class="btn btn-danger btn-small" style="display: none;">
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <button type="button" id="btnSaveLicense" class="btn btn-secondary btn-full" style="margin-top: 15px;">
+                    Subir Documentos de Licencia
+                </button>
+            </section>
+
             <div id="profileMessage" class="auth-message" style="display: none;"></div>
 
-            <button type="submit" class="btn btn-primary btn-full">
-                Guardar cambios
+            <button type="submit" class="btn btn-primary btn-full" style="margin-top: 20px;">
+                Guardar cambios del perfil
             </button>
         </form>
     </main>

@@ -213,9 +213,13 @@ function crearTarjetaReserva(reservation) {
     card.className = "reservation-card";
 
     const total = Number(reservation.total_pago) || 0;
+    const etiquetaEditado = reservation.editado_por_cliente === 1
+        ? `<span style="display: inline-block; background-color: #ffc107; color: #212529; font-weight: bold; font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; margin-bottom: 10px;">Editado por el cliente</span>`
+        : "";
 
     card.innerHTML = `
-        <h3>${escaparHtml(reservation.titulo)}</h3>
+        ${etiquetaEditado}
+        <h3>${escaparHtml(reservation.vehiculo_titulo || reservation.titulo)}</h3>
 
         <p>
             Cliente:

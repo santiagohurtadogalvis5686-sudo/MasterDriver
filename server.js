@@ -1,2358 +1,333 @@
 const express = require("express");
-const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
 const cors = require("cors");
-const multer = require("multer");
-const fs = require("fs");
 const path = require("path");
-
-// =====================================================
-// DATABASE
-// =====================================================
+const fs = require("fs");
+const jwt = require("jsonwebtoken");
+const multer = require("multer");
 
 const {
-    db,
     run,
     get,
     all,
     initializeDatabase
 } = require("./database/database");
 
-// =====================================================
-// EXPRESS
-// =====================================================
-
 const app = express();
+const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || "masterdriver_secret_key_2026";
 
-const PORT = 3000;
+// Configuración de almacenamiento de uploads
+const uploadsDirectory = path.join(__dirname, "uploads");
+const vehiclesUploadsDirectory = path.join(uploadsDirectory, "vehicles");
+const documentsUploadsDirectory = path.join(uploadsDirectory, "documents");
 
-// =====================================================
-// HELPER PARA EXPIRACIÓN AUTOMÁTICA DE RESERVAS (10 MINUTOS)
-// =====================================================
+fs.mkdirSync(uploadsDirectory, { recursive: true });
+fs.mkdirSync(vehiclesUploadsDirectory, { recursive: true });
+fs.mkdirSync(documentsUploadsDirectory, { recursive: true });
 
-async function limpiarReservasExpiradas() {
-    try {
-        // Expirar reservas cuyo fecha_creacion tenga 10 minutos (600 segundos) o más
-        await run(
-            `
-            UPDATE reservations
-            SET estado = 'expirada'
-            WHERE estado IN ('pendiente', 'confirmada')
-            AND (strftime('%s', 'now') - strftime('%s', fecha_creacion)) >= 600
-            `
-        );
-    } catch (error) {
-        console.error("Error al limpiar reservas expiradas:", error);
+// Middleware global
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Servir archivos estáticos desde la raíz del proyecto
+app.use(express.static(__dirname));
+app.use("/uploads/vehicles", express.static(vehiclesUploadsDirectory));
+
+// Configuración de Multer para Licencias y Vehículos
+const storageDocuments = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, documentsUploadsDirectory);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        cb(null, `licencia-${req.user.id}-${uniqueSuffix}${ext}`);
     }
+});
+
+const uploadDocuments = multer({
+    storage: storageDocuments,
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = /jpeg|jpg|png|webp|pdf/;
+        const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+        const mimetype = allowedTypes.test(file.mimetype);
+        if (extname && mimetype) {
+            return cb(null, true);
+        }
+        cb(new Error("Solo se permiten archivos de imagen (JPG, PNG, WEBP) o PDF."));
+    }
+});
+
+// Middleware de autenticación JWT
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers["authorization"];
+    const token = authHeader && authHeader.split(" ")[1];
+
+    if (!token) {
+        return res.status(401).json({ ok: false, mensaje: "Token de autenticación no proporcionado." });
+    }
+
+    jwt.verify(token, JWT_SECRET, async (err, decoded) => {
+        if (err) {
+            return res.status(401).json({ ok: false, mensaje: "Sesión inválida o expirada." });
+        }
+        try {
+            const user = await get("SELECT id, nombre, correo, telefono, licencia_frente, licencia_reverso FROM users WHERE id = ?", [decoded.id]);
+            if (!user) {
+                return res.status(401).json({ ok: false, mensaje: "Usuario no encontrado." });
+            }
+            req.user = user;
+            next();
+        } catch (dbError) {
+            return res.status(500).json({ ok: false, mensaje: "Error consultando usuario en la base de datos." });
+        }
+    });
 }
 
 // =====================================================
-// MIDDLEWARES
+// RUTAS DE AUTENTICACIÓN Y PERFIL
 // =====================================================
 
-app.use(cors());
+app.post("/api/login", async (req, res) => {
+    const { correo, password } = req.body;
 
-app.use(
-    express.json()
-);
-
-app.use(
-    express.urlencoded({
-        extended: true
-    })
-);
-
-// Servir archivos del frontend
-app.use(
-    express.static(__dirname)
-);
-
-// Middleware para verificar expiración en peticiones entrantes
-app.use(async (req, res, next) => {
-    if (req.path.startsWith("/api/reservations") || req.path.startsWith("/api/vehicles") || req.path.startsWith("/api/owner")) {
-        await limpiarReservasExpiradas();
+    if (!correo || !password) {
+        return res.status(400).json({ ok: false, mensaje: "Correo y contraseña son requeridos." });
     }
-    next();
+
+    try {
+        const user = await get("SELECT * FROM users WHERE correo = ?", [correo]);
+
+        // Verificación con la columna password_hash de la base de datos
+        if (!user || user.password_hash !== password) {
+            return res.status(401).json({ ok: false, mensaje: "Credenciales incorrectas." });
+        }
+
+        const token = jwt.sign({ id: user.id, correo: user.correo }, JWT_SECRET, { expiresIn: "24h" });
+
+        res.json({
+            ok: true,
+            mensaje: "Inicio de sesión exitoso.",
+            token,
+            user: {
+                id: user.id,
+                nombre: user.nombre,
+                correo: user.correo
+            }
+        });
+    } catch (error) {
+        console.error("Error en login:", error);
+        res.status(500).json({ ok: false, mensaje: "Error interno del servidor." });
+    }
+});
+
+app.post("/api/register", async (req, res) => {
+    const { nombre, correo, password, telefono } = req.body;
+
+    if (!nombre || !correo || !password) {
+        return res.status(400).json({ ok: false, mensaje: "Todos los campos obligatorios deben completarse." });
+    }
+
+    try {
+        const existingUser = await get("SELECT id FROM users WHERE correo = ?", [correo]);
+        if (existingUser) {
+            return res.status(400).json({ ok: false, mensaje: "El correo electrónico ya está registrado." });
+        }
+
+        // Inserción utilizando password_hash acorde al esquema de SQLite
+        const result = await run(
+            "INSERT INTO users (nombre, correo, password_hash, telefono) VALUES (?, ?, ?, ?)",
+            [nombre, correo, password, telefono || ""]
+        );
+
+        const token = jwt.sign({ id: result.lastID, correo }, JWT_SECRET, { expiresIn: "24h" });
+
+        res.json({
+            ok: true,
+            mensaje: "Usuario registrado correctamente.",
+            token,
+            user: { id: result.lastID, nombre, correo }
+        });
+    } catch (error) {
+        console.error("Error en registro:", error);
+        res.status(500).json({ ok: false, mensaje: "Error al registrar el usuario." });
+    }
+});
+
+app.get("/api/profile", authenticateToken, (req, res) => {
+    res.json({
+        ok: true,
+        user: {
+            id: req.user.id,
+            nombre: req.user.nombre,
+            correo: req.user.correo,
+            telefono: req.user.telefono || "",
+            licencia_frente: req.user.licencia_frente ? `/api/documents/licencia/${req.user.id}/frente` : null,
+            licencia_reverso: req.user.licencia_reverso ? `/api/documents/licencia/${req.user.id}/reverso` : null
+        }
+    });
 });
 
 // =====================================================
-// CARPETAS DE ARCHIVOS
+// RUTAS DE VEHÍCULOS
 // =====================================================
 
-const uploadsDirectory =
-    path.join(
-        __dirname,
-        "uploads"
-    );
-
-const vehiclesDirectory =
-    path.join(
-        uploadsDirectory,
-        "vehicles"
-    );
-
-const documentsDirectory =
-    path.join(
-        uploadsDirectory,
-        "documents"
-    );
-
-// Crear carpetas si no existen
-
-if (
-    !fs.existsSync(
-        uploadsDirectory
-    )
-) {
-    fs.mkdirSync(
-        uploadsDirectory,
-        {
-            recursive: true
-        }
-    );
-}
-
-if (
-    !fs.existsSync(
-        vehiclesDirectory
-    )
-) {
-    fs.mkdirSync(
-        vehiclesDirectory,
-        {
-            recursive: true
-        }
-    );
-}
-
-if (
-    !fs.existsSync(
-        documentsDirectory
-    )
-) {
-    fs.mkdirSync(
-        documentsDirectory,
-        {
-            recursive: true
-        }
-    );
-}
-
-// =====================================================
-// SERVIR ARCHIVOS UPLOADS
-// =====================================================
-
-app.use(
-    "/uploads",
-    express.static(
-        uploadsDirectory
-    )
-);
-
-// =====================================================
-// CONFIGURACIÓN MULTER - IMÁGENES
-// =====================================================
-
-const imageStorage =
-    multer.diskStorage({
-
-        destination:
-            function (
-                req,
-                file,
-                callback
-            ) {
-
-                callback(
-                    null,
-                    vehiclesDirectory
-                );
-            },
-
-        filename:
-            function (
-                req,
-                file,
-                callback
-            ) {
-
-                const extension =
-                    path.extname(
-                        file.originalname
-                    );
-
-                const filename =
-                    Date.now() +
-                    "-" +
-                    crypto
-                        .randomBytes(6)
-                        .toString("hex") +
-                    extension;
-
-                callback(
-                    null,
-                    filename
-                );
-            }
-    });
-
-const uploadImages =
-    multer({
-
-        storage:
-            imageStorage,
-
-        limits: {
-
-            fileSize:
-                5 * 1024 * 1024
-        },
-
-        fileFilter:
-            function (
-                req,
-                file,
-                callback
-            ) {
-
-                const allowedTypes = [
-                    "image/jpeg",
-                    "image/png",
-                    "image/webp"
-                ];
-
-                if (
-                    allowedTypes.includes(
-                        file.mimetype
-                    )
-                ) {
-
-                    callback(
-                        null,
-                        true
-                    );
-
-                } else {
-
-                    callback(
-                        new Error(
-                            "Solo se permiten imágenes JPG, PNG o WEBP."
-                        )
-                    );
-                }
-            }
-    });
-
-// =====================================================
-// CONFIGURACIÓN MULTER - DOCUMENTOS
-// =====================================================
-
-const documentStorage =
-    multer.diskStorage({
-
-        destination:
-            function (
-                req,
-                file,
-                callback
-            ) {
-
-                callback(
-                    null,
-                    documentsDirectory
-                );
-            },
-
-        filename:
-            function (
-                req,
-                file,
-                callback
-            ) {
-
-                const extension =
-                    path.extname(
-                        file.originalname
-                    );
-
-                const filename =
-                    Date.now() +
-                    "-" +
-                    crypto
-                        .randomBytes(6)
-                        .toString("hex") +
-                    extension;
-
-                callback(
-                    null,
-                    filename
-                );
-            }
-    });
-
-const uploadDocuments =
-    multer({
-
-        storage:
-            documentStorage,
-
-        limits: {
-
-            fileSize:
-                10 * 1024 * 1024
-        }
-    });
-
-// =====================================================
-// AUTENTICACIÓN
-// =====================================================
-
-function autenticar(
-    req,
-    res,
-    next
-) {
-
-    const authorization =
-        req.headers.authorization;
-
-    if (!authorization) {
-
-        return res.status(401).json({
-
-            ok: false,
-
-            mensaje:
-                "No se proporcionó un token."
-        });
+app.get("/api/vehicles", async (req, res) => {
+    try {
+        const vehicles = await all("SELECT * FROM vehicles ORDER BY created_at DESC");
+        res.json({ ok: true, vehicles });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: "Error al obtener los vehículos." });
     }
+});
 
-    const token =
-        authorization.replace(
-            "Bearer ",
-            ""
+app.get("/api/my-vehicles", authenticateToken, async (req, res) => {
+    try {
+        const vehicles = await all("SELECT * FROM vehicles WHERE user_id = ? ORDER BY created_at DESC", [req.user.id]);
+        res.json({ ok: true, vehicles });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: "Error al obtener tus publicaciones." });
+    }
+});
+
+app.put("/api/vehicles/:id", authenticateToken, async (req, res) => {
+    const { titulo, marca, modelo, precio, whatsapp, descripcion } = req.body;
+    try {
+        await run(
+            "UPDATE vehicles SET titulo = ?, marca = ?, modelo = ?, precio = ?, whatsapp = ?, descripcion = ? WHERE id = ? AND user_id = ?",
+            [titulo, marca, modelo, precio, whatsapp, descripcion, req.params.id, req.user.id]
         );
-
-    if (!token) {
-
-        return res.status(401).json({
-
-            ok: false,
-
-            mensaje:
-                "Token inválido."
-        });
+        res.json({ ok: true, mensaje: "Vehículo actualizado correctamente." });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: "Error al actualizar el vehículo." });
     }
+});
 
-    get(
-        `
-        SELECT
-
-            sessions.id AS session_id,
-
-            sessions.token,
-
-            sessions.fecha_inicio,
-
-            sessions.estado,
-
-            users.id AS user_id,
-
-            users.nombre,
-
-            users.correo,
-
-            users.telefono,
-
-            users.rol
-
-        FROM sessions
-
-        INNER JOIN users
-            ON users.id =
-               sessions.user_id
-
-        WHERE sessions.token = ?
-
-        AND sessions.estado =
-            'activa'
-        `,
-        [token]
-    )
-        .then(
-            user => {
-
-                if (!user) {
-
-                    return res.status(401).json({
-
-                        ok: false,
-
-                        mensaje:
-                            "Sesión inválida o expirada."
-                    });
-                }
-
-                req.user = user;
-
-                next();
-            }
-        )
-        .catch(
-            error => {
-
-                console.error(
-                    "Error autenticando:",
-                    error
-                );
-
-                res.status(500).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Error verificando la sesión."
-                });
-            }
-        );
-}
-
-// =====================================================
-// RUTA PRINCIPAL
-// =====================================================
-
-app.get(
-    "/api",
-    (req, res) => {
-
-        res.json({
-
-            ok: true,
-
-            mensaje:
-                "API de MasterDriver funcionando.",
-
-            version:
-                "1.0.0"
-        });
+app.delete("/api/vehicles/:id", authenticateToken, async (req, res) => {
+    try {
+        await run("DELETE FROM vehicles WHERE id = ? AND user_id = ?", [req.params.id, req.user.id]);
+        res.json({ ok: true, mensaje: "Vehículo eliminado correctamente." });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: "Error al eliminar el vehículo." });
     }
-);
+});
 
 // =====================================================
-// REGISTRO
+// RUTAS DE RESERVAS
 // =====================================================
 
-app.post(
-    "/api/auth/register",
-    async (req, res) => {
+app.put("/api/reservations/:id", authenticateToken, async (req, res) => {
+    const reservationId = req.params.id;
+    const { fecha_inicio, fecha_fin } = req.body;
 
-        try {
-
-            const {
-                nombre,
-                correo,
-                password
-            } = req.body;
-
-            if (
-                !nombre ||
-                !correo ||
-                !password
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Nombre, correo y contraseña son obligatorios."
-                });
-            }
-
-            if (
-                password.length < 6
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "La contraseña debe tener mínimo 6 caracteres."
-                });
-            }
-
-            const passwordHash =
-                await bcrypt.hash(
-                    password,
-                    10
-                );
-
-            const result =
-                await run(
-                    `
-                    INSERT INTO users
-                    (
-                        nombre,
-                        correo,
-                        password_hash,
-                        rol
-                    )
-
-                    VALUES (?, ?, ?, ?)
-                    `,
-                    [
-                        nombre.trim(),
-                        correo
-                            .trim()
-                            .toLowerCase(),
-                        passwordHash,
-                        "usuario"
-                    ]
-                );
-
-            res.status(201).json({
-
-                ok: true,
-
-                mensaje:
-                    "Usuario registrado correctamente.",
-
-                userId:
-                    result.lastID
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error registrando usuario:",
-                error
-            );
-
-            if (
-                error.message.includes(
-                    "UNIQUE constraint failed"
-                )
-            ) {
-
-                return res.status(409).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El correo ya está registrado."
-                });
-            }
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error interno registrando el usuario."
-            });
-        }
+    if (!fecha_inicio || !fecha_fin) {
+        return res.status(400).json({ ok: false, mensaje: "Las fechas de inicio y fin son requeridas." });
     }
-);
-
-// =====================================================
-// LOGIN
-// =====================================================
-
-app.post(
-    "/api/auth/login",
-    async (req, res) => {
-
-        try {
-
-            const {
-                correo,
-                password
-            } = req.body;
-
-            if (
-                !correo ||
-                !password
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Correo y contraseña son obligatorios."
-                });
-            }
-
-            const user =
-                await get(
-                    `
-                    SELECT *
-
-                    FROM users
-
-                    WHERE correo = ?
-                    `,
-                    [
-                        correo
-                            .trim()
-                            .toLowerCase()
-                    ]
-                );
-
-            if (!user) {
-
-                return res.status(401).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Correo o contraseña incorrectos."
-                });
-            }
-
-            const passwordCorrecta =
-                await bcrypt.compare(
-                    password,
-                    user.password_hash
-                );
-
-            if (!passwordCorrecta) {
-
-                return res.status(401).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Correo o contraseña incorrectos."
-                });
-            }
-
-            // Generar token
-            const token =
-                crypto
-                    .randomBytes(32)
-                    .toString("hex");
-
-            await run(
-                `
-                INSERT INTO sessions
-                (
-                    user_id,
-                    token,
-                    estado
-                )
-
-                VALUES (?, ?, ?)
-                `,
-                [
-                    user.id,
-                    token,
-                    "activa"
-                ]
-            );
-
-            res.json({
-
-                ok: true,
-
-                mensaje:
-                    "Inicio de sesión exitoso.",
-
-                token,
-
-                usuario: {
-
-                    id:
-                        user.id,
-
-                    nombre:
-                        user.nombre,
-
-                    correo:
-                        user.correo,
-
-                    rol:
-                        user.rol
-                }
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error iniciando sesión:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error interno iniciando sesión."
-            });
-        }
-    }
-);
-
-// =====================================================
-// USUARIO ACTUAL
-// =====================================================
-
-app.get(
-    "/api/auth/me",
-    autenticar,
-    (req, res) => {
-
-        res.json({
-
-            ok: true,
-
-            usuario: {
-
-                id:
-                    req.user.user_id,
-
-                nombre:
-                    req.user.nombre,
-
-                correo:
-                    req.user.correo,
-
-                telefono:
-                    req.user.telefono,
-
-                rol:
-                    req.user.rol
-            }
-        });
-    }
-);
-
-// =====================================================
-// LOGOUT
-// =====================================================
-
-app.post(
-    "/api/auth/logout",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const token =
-                req.headers.authorization
-                    .replace(
-                        "Bearer ",
-                        ""
-                    );
-
-            await run(
-                `
-                UPDATE sessions
-
-                SET estado =
-                    'cerrada'
-
-                WHERE token = ?
-                `,
-                [token]
-            );
-
-            res.json({
-
-                ok: true,
-
-                mensaje:
-                    "Sesión cerrada correctamente."
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error cerrando sesión:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "No se pudo cerrar la sesión."
-            });
-        }
-    }
-);
-
-// =====================================================
-// PERFIL DE USUARIO
-// =====================================================
-
-app.get(
-    "/api/profile",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const user =
-                await get(
-                    `
-                    SELECT id, nombre, correo, telefono, rol
-                    FROM users
-                    WHERE id = ?
-                    `,
-                    [req.user.user_id]
-                );
-
-            if (!user) {
-                return res.status(404).json({
-                    ok: false,
-                    mensaje: "Usuario no encontrado."
-                });
-            }
-
-            res.json({
-                ok: true,
-                user
-            });
-
-        } catch (error) {
-
-            console.error("Error obteniendo perfil:", error);
-            res.status(500).json({
-                ok: false,
-                mensaje: "Error obteniendo la información del perfil."
-            });
-        }
-    }
-);
-
-app.put(
-    "/api/profile",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const { nombre, correo, telefono } = req.body;
-
-            if (!nombre || !correo) {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: "Nombre y correo son obligatorios."
-                });
-            }
-
-            await run(
-                `
-                UPDATE users
-                SET nombre = ?, correo = ?, telefono = ?
-                WHERE id = ?
-                `,
-                [
-                    nombre.trim(),
-                    correo.trim().toLowerCase(),
-                    telefono ? telefono.trim() : null,
-                    req.user.user_id
-                ]
-            );
-
-            res.json({
-                ok: true,
-                mensaje: "Perfil actualizado correctamente."
-            });
-
-        } catch (error) {
-
-            console.error("Error actualizando perfil:", error);
-
-            if (error.message.includes("UNIQUE constraint failed")) {
-                return res.status(409).json({
-                    ok: false,
-                    mensaje: "El correo ya está en uso por otro usuario."
-                });
-            }
-
-            res.status(500).json({
-                ok: false,
-                mensaje: "Error actualizando la información del perfil."
-            });
-        }
-    }
-);
-
-// =====================================================
-// OBTENER TODOS LOS VEHÍCULOS (CATÁLOGO)
-// =====================================================
-
-app.get(
-    "/api/vehicles",
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            const excludeUser = req.query.exclude_user || null;
-
-            let sql = `
-                SELECT
-                    vehicles.*,
-                    users.nombre AS propietario
-                FROM vehicles
-                INNER JOIN users
-                    ON users.id = vehicles.user_id
-            `;
-
-            const params = [];
-
-            if (excludeUser) {
-                sql += ` WHERE vehicles.user_id != ?`;
-                params.push(excludeUser);
-            }
-
-            sql += ` ORDER BY vehicles.fecha_creacion DESC`;
-
-            const vehicles = await all(sql, params);
-
-            const resultado =
-                vehicles.map(
-                    vehicle => {
-
-                        return {
-
-                            ...vehicle,
-
-                            fotografias:
-                                JSON.parse(
-                                    vehicle.fotografias ||
-                                    "[]"
-                                ),
-
-                            disponibilidad:
-                                JSON.parse(
-                                    vehicle.disponibilidad ||
-                                    "{}"
-                                ),
-
-                            documentos:
-                                JSON.parse(
-                                    vehicle.documentos ||
-                                    "{}"
-                                ),
-
-                            condiciones_uso:
-                                JSON.parse(
-                                    vehicle.condiciones_uso ||
-                                    "[]"
-                                )
-                        };
-                    }
-                );
-
-            res.json({
-
-                ok: true,
-
-                total:
-                    resultado.length,
-
-                vehicles:
-                    resultado
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error obteniendo vehículos:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error obteniendo los vehículos."
-            });
-        }
-    }
-);
-
-// =====================================================
-// OBTENER MIS PUBLICACIONES
-// =====================================================
-
-app.get(
-    "/api/my-vehicles",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const vehicles = await all(
-                `
-                SELECT
-                    vehicles.*,
-                    users.nombre AS propietario
-                FROM vehicles
-                INNER JOIN users
-                    ON users.id = vehicles.user_id
-                WHERE vehicles.user_id = ?
-                ORDER BY vehicles.fecha_creacion DESC
-                `,
-                [req.user.user_id]
-            );
-
-            const resultado = vehicles.map(vehicle => ({
-                ...vehicle,
-                fotografias: JSON.parse(vehicle.fotografias || "[]"),
-                disponibilidad: JSON.parse(vehicle.disponibilidad || "{}"),
-                documentos: JSON.parse(vehicle.documentos || "{}"),
-                condiciones_uso: JSON.parse(vehicle.condiciones_uso || "[]")
-            }));
-
-            res.json({
-                ok: true,
-                total: resultado.length,
-                vehicles: resultado
-            });
-
-        } catch (error) {
-
-            console.error("Error obteniendo mis publicaciones:", error);
-            res.status(500).json({
-                ok: false,
-                mensaje: "Error obteniendo tus publicaciones."
-            });
-        }
-    }
-);
-
-// =====================================================
-// OBTENER UN VEHÍCULO
-// =====================================================
-
-app.get(
-    "/api/vehicles/:id",
-    async (req, res) => {
-
-        try {
-
-            const vehicle =
-                await get(
-                    `
-                    SELECT
-
-                        vehicles.*,
-
-                        users.nombre AS propietario
-
-                    FROM vehicles
-
-                    INNER JOIN users
-                        ON users.id =
-                           vehicles.user_id
-
-                    WHERE vehicles.id = ?
-                    `,
-                    [
-                        req.params.id
-                    ]
-                );
-
-            if (!vehicle) {
-
-                return res.status(404).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Vehículo no encontrado."
-                });
-            }
-
-            vehicle.fotografias =
-                JSON.parse(
-                    vehicle.fotografias ||
-                    "[]"
-                );
-
-            vehicle.disponibilidad =
-                JSON.parse(
-                    vehicle.disponibilidad ||
-                    "{}"
-                );
-
-            vehicle.documentos =
-                JSON.parse(
-                    vehicle.documentos ||
-                    "{}"
-                );
-
-            vehicle.condiciones_uso =
-                JSON.parse(
-                    vehicle.condiciones_uso ||
-                    "[]"
-                );
-
-            res.json({
-
-                ok: true,
-
-                vehicle
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error obteniendo vehículo:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error obteniendo el vehículo."
-            });
-        }
-    }
-);
-
-// =====================================================
-// CREAR VEHÍCULO / PUBLICACIÓN
-// =====================================================
-
-app.post(
-    "/api/vehicles",
-
-    autenticar,
-
-    uploadImages.fields([
-
-        {
-            name: "fotografias",
-            maxCount: 10
-        },
-
-        {
-            name: "documentos_archivos",
-            maxCount: 10
-        }
-
-    ]),
-
-    async (req, res) => {
-
-        try {
-
-            const {
-                titulo,
-                tipo,
-                marca,
-                modelo,
-                precio,
-                whatsapp,
-                descripcion,
-
-                disponibilidad_hora_inicio,
-                disponibilidad_hora_fin,
-
-                dias_disponibles,
-
-                fecha_inicio,
-                fecha_fin,
-
-                documentos,
-
-                condiciones_uso
-            } = req.body;
-
-            // ==========================================
-            // VALIDACIONES
-            // ==========================================
-
-            if (
-                !titulo ||
-                !tipo ||
-                !marca ||
-                !modelo ||
-                !precio ||
-                !whatsapp
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Título, tipo, marca, modelo, precio y número de WhatsApp son obligatorios."
-                });
-            }
-
-            if (
-                Number(precio) <= 0
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El precio debe ser mayor que cero."
-                });
-            }
-
-            // ==========================================
-            // FOTOGRAFÍAS
-            // ==========================================
-
-            const fotografias = [];
-
-            if (
-                req.files &&
-                req.files.fotografias
-            ) {
-
-                req.files.fotografias
-                    .forEach(
-                        file => {
-
-                            fotografias.push(
-                                `/uploads/vehicles/${file.filename}`
-                            );
-                        }
-                    );
-            }
-
-            // ==========================================
-            // DOCUMENTOS
-            // ==========================================
-
-            let documentosData = {};
-
-            if (
-                documentos
-            ) {
-
-                try {
-
-                    documentosData =
-                        JSON.parse(
-                            documentos
-                        );
-
-                } catch (error) {
-
-                    documentosData = {};
-                }
-            }
-
-            documentosData.archivos =
-                [];
-
-            if (
-                req.files &&
-                req.files.documentos_archivos
-            ) {
-
-                req.files.documentos_archivos
-                    .forEach(
-                        file => {
-
-                            documentosData
-                                .archivos
-                                .push({
-
-                                    nombre:
-                                        file.originalname,
-
-                                    ruta:
-                                        `/uploads/documents/${file.filename}`
-                                });
-                        }
-                    );
-            }
-
-            // ==========================================
-            // DISPONIBILIDAD
-            // ==========================================
-
-            let dias = [];
-
-            if (
-                dias_disponibles
-            ) {
-
-                try {
-
-                    dias =
-                        JSON.parse(
-                            dias_disponibles
-                        );
-
-                } catch (error) {
-
-                    dias =
-                        dias_disponibles
-                            .split(",")
-                            .map(
-                                dia =>
-                                    dia.trim()
-                            )
-                            .filter(
-                                Boolean
-                            );
-                }
-            }
-
-            const disponibilidad = {
-
-                hora_inicio:
-                    disponibilidad_hora_inicio ||
-                    "",
-
-                hora_fin:
-                    disponibilidad_hora_fin ||
-                    "",
-
-                dias,
-
-                fecha_inicio:
-                    fecha_inicio ||
-                    "",
-
-                fecha_fin:
-                    fecha_fin ||
-                    ""
-            };
-
-            // ==========================================
-            // CONDICIONES
-            // ==========================================
-
-            let condiciones =
-                [];
-
-            if (
-                condiciones_uso
-            ) {
-
-                try {
-
-                    condiciones =
-                        JSON.parse(
-                            condiciones_uso
-                        );
-
-                } catch (error) {
-
-                    condiciones =
-                        condiciones_uso
-                            .split("\n")
-                            .map(
-                                condicion =>
-                                    condicion.trim()
-                            )
-                            .filter(
-                                Boolean
-                            );
-                }
-            }
-
-            // ==========================================
-            // INSERTAR VEHÍCULO
-            // ==========================================
-
-            const result =
-                await run(
-                    `
-                    INSERT INTO vehicles
-                    (
-                        user_id,
-
-                        titulo,
-
-                        tipo,
-
-                        marca,
-
-                        modelo,
-
-                        precio,
-
-                        whatsapp,
-
-                        descripcion,
-
-                        fotografias,
-
-                        disponibilidad,
-
-                        documentos,
-
-                        condiciones_uso
-                    )
-
-                    VALUES
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    `,
-                    [
-
-                        req.user.user_id,
-
-                        titulo.trim(),
-
-                        tipo,
-
-                        marca.trim(),
-
-                        modelo.trim(),
-
-                        Number(precio),
-
-                        whatsapp.trim(),
-
-                        descripcion ||
-                            "",
-
-                        JSON.stringify(
-                            fotografias
-                        ),
-
-                        JSON.stringify(
-                            disponibilidad
-                        ),
-
-                        JSON.stringify(
-                            documentosData
-                        ),
-
-                        JSON.stringify(
-                            condiciones
-                        )
-                    ]
-                );
-
-            res.status(201).json({
-
-                ok: true,
-
-                mensaje:
-                    "Vehículo publicado correctamente.",
-
-                vehicleId:
-                    result.lastID
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error creando vehículo:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "No se pudo crear la publicación."
-            });
-        }
-    }
-);
-
-// =====================================================
-// EDITAR MI VEHÍCULO
-// =====================================================
-
-app.put(
-    "/api/vehicles/:id",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const { titulo, marca, modelo, precio, whatsapp, descripcion } = req.body;
-            const vehicleId = req.params.id;
-
-            const vehicle = await get(
-                `SELECT * FROM vehicles WHERE id = ? AND user_id = ?`,
-                [vehicleId, req.user.user_id]
-            );
-
-            if (!vehicle) {
-                return res.status(403).json({
-                    ok: false,
-                    mensaje: "No estás autorizado para editar este vehículo o no existe."
-                });
-            }
-
-            await run(
-                `
-                UPDATE vehicles
-                SET titulo = ?, marca = ?, modelo = ?, precio = ?, whatsapp = ?, descripcion = ?
-                WHERE id = ? AND user_id = ?
-                `,
-                [
-                    titulo.trim(),
-                    marca.trim(),
-                    modelo.trim(),
-                    Number(precio),
-                    whatsapp.trim(),
-                    descripcion || "",
-                    vehicleId,
-                    req.user.user_id
-                ]
-            );
-
-            res.json({
-                ok: true,
-                mensaje: "Publicación actualizada correctamente."
-            });
-
-        } catch (error) {
-
-            console.error("Error editando vehículo:", error);
-            res.status(500).json({
-                ok: false,
-                mensaje: "No se pudo actualizar la publicación."
-            });
-        }
-    }
-);
-
-// =====================================================
-// ELIMINAR MI VEHÍCULO
-// =====================================================
-
-app.delete(
-    "/api/vehicles/:id",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            const vehicleId = req.params.id;
-
-            const result = await run(
-                `DELETE FROM vehicles WHERE id = ? AND user_id = ?`,
-                [vehicleId, req.user.user_id]
-            );
-
-            if (result.changes === 0) {
-                return res.status(403).json({
-                    ok: false,
-                    mensaje: "No tienes permiso para eliminar esta publicación o no existe."
-                });
-            }
-
-            res.json({
-                ok: true,
-                mensaje: "Publicación eliminada correctamente."
-            });
-
-        } catch (error) {
-
-            console.error("Error eliminando vehículo:", error);
-            res.status(500).json({
-                ok: false,
-                mensaje: "Error eliminando la publicación."
-            });
-        }
-    }
-);
-
-// =====================================================
-// RESERVAS DE CLIENTE
-// =====================================================
-
-app.post(
-    "/api/reservations",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            const {
-                vehicle_id,
-                fecha_inicio,
-                fecha_fin,
-                total_pago
-            } = req.body;
-
-            if (
-                !vehicle_id ||
-                !fecha_inicio ||
-                !fecha_fin
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Vehículo, fecha inicial y fecha final son obligatorios."
-                });
-            }
-
-            // Comprobar vehículo
-            const vehicle =
-                await get(
-                    `
-                    SELECT *
-
-                    FROM vehicles
-
-                    WHERE id = ?
-                    `,
-                    [
-                        vehicle_id
-                    ]
-                );
-
-            if (!vehicle) {
-
-                return res.status(404).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El vehículo no existe."
-                });
-            }
-
-            // Comprobar fechas
-            if (
-                new Date(fecha_fin) <
-                new Date(fecha_inicio)
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "La fecha final no puede ser anterior a la fecha inicial."
-                });
-            }
-
-            // Comprobar reservas activas (no expiradas ni canceladas)
-            const reservation =
-                await get(
-                    `
-                    SELECT *
-
-                    FROM reservations
-
-                    WHERE vehicle_id = ?
-
-                    AND estado IN
-                    (
-                        'pendiente',
-                        'confirmada'
-                    )
-
-                    AND fecha_inicio < ?
-
-                    AND fecha_fin > ?
-                    `,
-                    [
-                        vehicle_id,
-
-                        fecha_fin,
-
-                        fecha_inicio
-                    ]
-                );
-
-            if (
-                reservation
-            ) {
-
-                return res.status(409).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El vehículo ya está reservado durante esas fechas."
-                });
-            }
-
-            // Crear reserva con timestamp actual de SQLite
-            const result =
-                await run(
-                    `
-                    INSERT INTO reservations
-                    (
-                        user_id,
-
-                        vehicle_id,
-
-                        fecha_inicio,
-
-                        fecha_fin,
-
-                        estado,
-
-                        total_pago,
-
-                        fecha_creacion
-                    )
-
-                    VALUES
-                    (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    `,
-                    [
-
-                        req.user.user_id,
-
-                        vehicle_id,
-
-                        fecha_inicio,
-
-                        fecha_fin,
-
-                        "pendiente",
-
-                        Number(
-                            total_pago || 0
-                        )
-                    ]
-                );
-
-            res.status(201).json({
-
-                ok: true,
-
-                mensaje:
-                    "Reserva creada correctamente.",
-
-                reservationId:
-                    result.lastID
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error creando reserva:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "No se pudo crear la reserva."
-            });
-        }
-    }
-);
-
-app.get(
-    "/api/reservations",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            // Filtrar y devolver únicamente reservas activas (pendiente / confirmada)
-            const reservations =
-                await all(
-                    `
-                    SELECT
-
-                        reservations.*,
-
-                        vehicles.titulo,
-
-                        vehicles.marca,
-
-                        vehicles.modelo,
-
-                        vehicles.precio,
-
-                        users.nombre AS usuario
-
-                    FROM reservations
-
-                    INNER JOIN vehicles
-                        ON vehicles.id =
-                           reservations.vehicle_id
-
-                    INNER JOIN users
-                        ON users.id =
-                           reservations.user_id
-
-                    WHERE reservations.user_id = ?
-                    AND reservations.estado IN ('pendiente', 'confirmada')
-
-                    ORDER BY
-                        reservations.fecha_creacion DESC
-                    `,
-                    [
-                        req.user.user_id
-                    ]
-                );
-
-            res.json({
-
-                ok: true,
-
-                total:
-                    reservations.length,
-
-                reservations
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error obteniendo reservas:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error obteniendo las reservas."
-            });
-        }
-    }
-);
-
-// =====================================================
-// CANCELAR RESERVA DE CLIENTE
-// =====================================================
-
-app.patch(
-    "/api/reservations/:id/cancel",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            const reservationId = Number(req.params.id);
-
-            if (!Number.isInteger(reservationId) || reservationId <= 0) {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: "Identificador de reserva no válido."
-                });
-            }
-
-            const reservation = await get(
-                `
-                SELECT *
-                FROM reservations
-                WHERE id = ? AND user_id = ?
-                `,
-                [reservationId, req.user.user_id]
-            );
-
-            if (!reservation) {
-                return res.status(404).json({
-                    ok: false,
-                    mensaje: "La reserva no existe o no pertenece a tu cuenta."
-                });
-            }
-
-            if (reservation.estado === "cancelada") {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: "La reserva ya fue cancelada anteriormente."
-                });
-            }
-
-            if (reservation.estado === "expirada") {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: "No es posible cancelar una reserva que ya ha expirado."
-                });
-            }
-
-            await run(
-                `
-                UPDATE reservations
-                SET estado = 'cancelada'
-                WHERE id = ? AND user_id = ?
-                `,
-                [reservationId, req.user.user_id]
-            );
-
-            res.json({
-                ok: true,
-                mensaje: "La reserva ha sido cancelada correctamente."
-            });
-
-        } catch (error) {
-
-            console.error("Error cancelando la reserva:", error);
-            res.status(500).json({
-                ok: false,
-                mensaje: "Ocurrió un error en el servidor al intentar cancelar la reserva."
-            });
-        }
-    }
-);
-
-// =====================================================
-// RESERVAS DE PROPIETARIO (OWNER)
-// =====================================================
-
-app.get(
-    "/api/owner/reservations",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            const reservations =
-                await all(
-                    `
-                    SELECT
-                        reservations.*,
-                        vehicles.titulo,
-                        vehicles.marca,
-                        vehicles.modelo,
-                        users.nombre AS cliente_nombre,
-                        users.correo AS cliente_correo
-                    FROM reservations
-                    INNER JOIN vehicles
-                        ON vehicles.id =
-                           reservations.vehicle_id
-                    INNER JOIN users
-                        ON users.id =
-                           reservations.user_id
-                    WHERE vehicles.user_id = ?
-                    AND reservations.estado IN ('pendiente', 'confirmada')
-                    ORDER BY
-                        CASE reservations.estado
-                            WHEN 'pendiente' THEN 0
-                            WHEN 'confirmada' THEN 1
-                            ELSE 2
-                        END,
-                        reservations.fecha_creacion DESC
-                    `,
-                    [
-                        req.user.user_id
-                    ]
-                );
-
-            res.json({
-
-                ok: true,
-
-                total:
-                    reservations.length,
-
-                reservations
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error obteniendo reservas recibidas:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "No se pudieron obtener las solicitudes de reserva."
-            });
-        }
-    }
-);
-
-app.patch(
-    "/api/owner/reservations/:id/status",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            const reservationId =
-                Number(req.params.id);
-
-            const { estado } =
-                req.body;
-
-            const estadosPermitidos = [
-                "confirmada",
-                "rechazada"
-            ];
-
-            if (
-                !Number.isInteger(reservationId) ||
-                reservationId <= 0
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El identificador de la reserva no es válido."
-                });
-            }
-
-            if (
-                !estadosPermitidos.includes(estado)
-            ) {
-
-                return res.status(400).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "El estado debe ser confirmada o rechazada."
-                });
-            }
-
-            const reservation =
-                await get(
-                    `
-                    SELECT
-                        reservations.id,
-                        reservations.estado
-                    FROM reservations
-                    INNER JOIN vehicles
-                        ON vehicles.id =
-                           reservations.vehicle_id
-                    WHERE reservations.id = ?
-                    AND vehicles.user_id = ?
-                    `,
-                    [
-                        reservationId,
-                        req.user.user_id
-                    ]
-                );
-
-            if (!reservation) {
-
-                return res.status(404).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "La reserva no existe o no pertenece a uno de tus vehículos."
-                });
-            }
-
-            if (
-                reservation.estado !==
-                "pendiente"
-            ) {
-
-                return res.status(409).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "Solo se pueden actualizar reservas pendientes."
-                });
-            }
-
-            await run(
-                `
-                UPDATE reservations
-                SET estado = ?
-                WHERE id = ?
-                `,
-                [
-                    estado,
-                    reservationId
-                ]
-            );
-
-            res.json({
-
-                ok: true,
-
-                mensaje:
-                    estado === "confirmada"
-                        ? "Reserva confirmada correctamente."
-                        : "Reserva rechazada correctamente.",
-
-                estado
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error actualizando estado de reserva:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "No se pudo actualizar el estado de la reserva."
-            });
-        }
-    }
-);
-
-// =====================================================
-// RESERVAS DE ADMINISTRACIÓN (SOLO ADMIN)
-// =====================================================
-
-app.get(
-    "/api/admin/reservations",
-    autenticar,
-    async (req, res) => {
-
-        try {
-
-            await limpiarReservasExpiradas();
-
-            if (
-                req.user.rol !==
-                "admin"
-            ) {
-
-                return res.status(403).json({
-
-                    ok: false,
-
-                    mensaje:
-                        "No tienes permisos de administrador."
-                });
-            }
-
-            const reservations =
-                await all(
-                    `
-                    SELECT
-
-                        reservations.*,
-
-                        vehicles.titulo,
-
-                        vehicles.marca,
-
-                        vehicles.modelo,
-
-                        users.nombre,
-
-                        users.correo
-
-                    FROM reservations
-
-                    INNER JOIN vehicles
-                        ON vehicles.id =
-                           reservations.vehicle_id
-
-                    INNER JOIN users
-                        ON users.id =
-                           reservations.user_id
-
-                    ORDER BY
-                        reservations.fecha_creacion DESC
-                    `
-                );
-
-            res.json({
-
-                ok: true,
-
-                reservations
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Error obteniendo reservas administrativas:",
-                error
-            );
-
-            res.status(500).json({
-
-                ok: false,
-
-                mensaje:
-                    "Error obteniendo las reservas."
-            });
-        }
-    }
-);
-
-// =====================================================
-// ERROR MULTER Y MANEJO DE ERRORES
-// =====================================================
-
-app.use(
-    (
-        error,
-        req,
-        res,
-        next
-    ) => {
-
-        if (
-            error instanceof
-            multer.MulterError
-        ) {
-
-            return res.status(400).json({
-
-                ok: false,
-
-                mensaje:
-                    `Error subiendo archivos: ${error.message}`
-            });
-        }
-
-        if (
-            error
-        ) {
-
-            console.error(
-                "Error:",
-                error
-            );
-
-            return res.status(400).json({
-
-                ok: false,
-
-                mensaje:
-                    error.message ||
-                    "Error procesando la solicitud."
-            });
-        }
-
-        next();
-    }
-);
-
-// =====================================================
-// RUTA 404
-// =====================================================
-
-app.use(
-    (
-        req,
-        res
-    ) => {
-
-        res.status(404).json({
-
-            ok: false,
-
-            mensaje:
-                "Endpoint no encontrado.",
-
-            ruta:
-                req.originalUrl
-        });
-    }
-);
-
-// =====================================================
-// INICIAR SERVIDOR
-// =====================================================
-
-async function iniciarServidor() {
 
     try {
-
-        console.log("");
-        console.log(
-            "Inicializando MasterDriver..."
+        const reservation = await get(
+            "SELECT id, user_id, estado FROM reservations WHERE id = ?",
+            [reservationId]
         );
 
-        await initializeDatabase();
+        if (!reservation) {
+            return res.status(404).json({ ok: false, mensaje: "Reserva no encontrada." });
+        }
 
-        console.log(
-            "Base de datos lista."
+        if (reservation.user_id !== req.user.id) {
+            return res.status(403).json({ ok: false, mensaje: "No tienes permiso para modificar esta reserva." });
+        }
+
+        if (reservation.estado !== "pendiente") {
+            return res.status(400).json({ 
+                ok: false, 
+                mensaje: `No es posible editar una reserva en estado '${reservation.estado}'. Solo se pueden modificar reservas pendientes.` 
+            });
+        }
+
+        const inicio = new Date(fecha_inicio);
+        const fin = new Date(fecha_fin);
+
+        if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin <= inicio) {
+            return res.status(400).json({ ok: false, mensaje: "Rango de fechas inválido." });
+        }
+
+        await run(
+            "UPDATE reservations SET fecha_inicio = ?, fecha_fin = ?, editado_por_cliente = 1 WHERE id = ?",
+            [fecha_inicio, fecha_fin, reservationId]
         );
 
-        // Tarea en segundo plano para limpiar expiradas cada 30 segundos
-        setInterval(limpiarReservasExpiradas, 30000);
-
-        app.listen(
-            PORT,
-            () => {
-
-                console.log("");
-                console.log(
-                    "================================"
-                );
-
-                console.log(
-                    "       MASTERDRIVER API"
-                );
-
-                console.log(
-                    "================================"
-                );
-
-                console.log("");
-
-                console.log(
-                    `Servidor: http://localhost:${PORT}`
-                );
-
-                console.log(
-                    `API: http://localhost:${PORT}/api`
-                );
-
-                console.log("");
-
-            }
-        );
-
+        res.json({ ok: true, mensaje: "Reserva actualizada correctamente." });
     } catch (error) {
-
-        console.error("");
-        console.error(
-            "================================"
-        );
-
-        console.error(
-            "ERROR INICIANDO MASTERDRIVER"
-        );
-
-        console.error(
-            "================================"
-        );
-
-        console.error("");
-
-        console.error(
-            error
-        );
-
-        process.exit(1);
+        console.error("Error al actualizar la reserva:", error);
+        res.status(500).json({ ok: false, mensaje: "Error interno al actualizar la reserva." });
     }
-}
+});
 
-// =====================================================
-// EJECUTAR
-// =====================================================
+app.get("/api/owner/reservations", authenticateToken, async (req, res) => {
+    try {
+        const reservations = await all(
+            `SELECT 
+                r.id, 
+                r.vehicle_id, 
+                r.user_id AS cliente_id,
+                r.fecha_inicio, 
+                r.fecha_fin, 
+                r.total_pago, 
+                r.estado, 
+                r.editado_por_cliente,
+                r.created_at,
+                v.titulo AS vehiculo_titulo, 
+                v.marca, 
+                v.modelo,
+                u.nombre AS cliente_nombre, 
+                u.correo AS cliente_correo,
+                u.telefono AS cliente_telefono,
+                u.licencia_frente AS cliente_licencia_frente,
+                u.licencia_reverso AS cliente_licencia_reverso
+             FROM reservations r
+             JOIN vehicles v ON r.vehicle_id = v.id
+             JOIN users u ON r.user_id = u.id
+             WHERE v.user_id = ?
+             ORDER BY r.created_at DESC`,
+            [req.user.id]
+        );
 
-iniciarServidor();
+        const mappedReservations = reservations.map(r => ({
+            ...r,
+            cliente_licencia_frente: r.cliente_licencia_frente ? `/api/documents/licencia/${r.cliente_id}/frente` : null,
+            cliente_licencia_reverso: r.cliente_licencia_reverso ? `/api/documents/licencia/${r.cliente_id}/reverso` : null
+        }));
+
+        res.json({ ok: true, reservations: mappedReservations });
+    } catch (error) {
+        console.error("Error obteniendo reservas del propietario:", error);
+        res.status(500).json({ ok: false, mensaje: "Error al obtener las reservaciones recibidas." });
+    }
+});
+
+app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, res) => {
+    const { estado } = req.body;
+    try {
+        await run("UPDATE reservations SET estado = ? WHERE id = ?", [estado, req.params.id]);
+        res.json({ ok: true, mensaje: "Estado de la reserva actualizado." });
+    } catch (error) {
+        res.status(500).json({ ok: false, mensaje: "Error actualizando estado de la reserva." });
+    }
+});
+
+// Ruta por defecto para enviar index.html al acceder a la raíz
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "index.html"));
+});
+
+// Inicializar DB y servidor
+initializeDatabase().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Servidor escuchando en http://localhost:${PORT}`);
+    });
+}).catch(err => {
+    console.error("Error crítico inicializando servidor:", err);
+});
