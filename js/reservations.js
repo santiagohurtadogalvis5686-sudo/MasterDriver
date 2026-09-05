@@ -103,6 +103,7 @@ async function cargarVehiculoSeleccionado() {
             );
 
             if (formMessage) {
+                formMessage.style.color = "#dc3545"; // Asegurar color rojo
                 formMessage.textContent =
                     data.mensaje ||
                     "No fue posible cargar el vehículo seleccionado.";
@@ -128,6 +129,7 @@ async function cargarVehiculoSeleccionado() {
             );
 
             if (formMessage) {
+                formMessage.style.color = "#dc3545"; // Asegurar color rojo
                 formMessage.textContent =
                     "No puedes reservar un vehículo publicado por ti.";
             }
@@ -147,6 +149,7 @@ async function cargarVehiculoSeleccionado() {
             );
 
             if (formMessage) {
+                formMessage.style.color = "#dc3545"; // Asegurar color rojo
                 formMessage.textContent =
                     "El vehículo no tiene una disponibilidad válida para reservar.";
             }
@@ -189,6 +192,7 @@ async function cargarVehiculoSeleccionado() {
         );
 
         if (formMessage) {
+            formMessage.style.color = "#dc3545"; // Color rojo
             formMessage.textContent =
                 "No se pudo conectar con el servidor.";
         }
@@ -196,42 +200,34 @@ async function cargarVehiculoSeleccionado() {
 }
 
 function obtenerDatosReservaDesdeDisponibilidad(vehicle) {
-
-    const disponibilidad =
-        vehicle.disponibilidad || {};
-
-    const fechaInicio =
-        disponibilidad.fecha_inicio;
-
-    const fechaFin =
-        disponibilidad.fecha_fin;
-
-    const horaInicio =
-        disponibilidad.hora_inicio;
-
-    const horaFin =
-        disponibilidad.hora_fin;
-
-    if (
-        !fechaInicio ||
-        !fechaFin ||
-        !horaInicio ||
-        !horaFin
-    ) {
+    if (!vehicle || !vehicle.disponibilidad) {
         return null;
     }
 
-    const inicio =
-        `${fechaInicio}T${horaInicio}`;
+    let disponibilidad = vehicle.disponibilidad;
 
-    const fin =
-        `${fechaFin}T${horaFin}`;
+    if (typeof disponibilidad === "string") {
+        try {
+            disponibilidad = JSON.parse(disponibilidad);
+        } catch (e) {
+            return null;
+        }
+    }
 
-    const fechaInicioReserva =
-        new Date(inicio);
+    const fechaInicio = disponibilidad.fecha_inicio;
+    const fechaFin = disponibilidad.fecha_fin;
+    const horaInicio = disponibilidad.hora_inicio;
+    const horaFin = disponibilidad.hora_fin;
 
-    const fechaFinReserva =
-        new Date(fin);
+    if (!fechaInicio || !fechaFin || !horaInicio || !horaFin) {
+        return null;
+    }
+
+    const inicio = `${fechaInicio}T${horaInicio}`;
+    const fin = `${fechaFin}T${horaFin}`;
+
+    const fechaInicioReserva = new Date(inicio);
+    const fechaFinReserva = new Date(fin);
 
     if (
         Number.isNaN(fechaInicioReserva.getTime()) ||
@@ -241,24 +237,14 @@ function obtenerDatosReservaDesdeDisponibilidad(vehicle) {
         return null;
     }
 
-    const diferenciaHoras =
-        (fechaFinReserva - fechaInicioReserva) /
-        (1000 * 60 * 60);
-
-    const horas =
-        Math.max(
-            1,
-            Math.ceil(diferenciaHoras)
-        );
-
-    const precioPorHora =
-        Number(vehicle.precio) || 0;
+    const diferenciaHoras = (fechaFinReserva - fechaInicioReserva) / (1000 * 60 * 60);
+    const horas = Math.max(1, Math.ceil(diferenciaHoras));
+    const precioPorHora = Number(vehicle.precio) || 0;
 
     return {
         fecha_inicio: inicio,
         fecha_fin: fin,
-        total_pago:
-            precioPorHora * horas
+        total_pago: precioPorHora * horas
     };
 }
 
@@ -280,6 +266,7 @@ async function enviarReserva() {
     ) {
 
         if (formMessage) {
+            formMessage.style.color = "#dc3545"; // Color rojo de error
             formMessage.textContent =
                 "No hay información válida para crear la reserva.";
         }
@@ -332,9 +319,14 @@ async function enviarReserva() {
 
         if (!response.ok) {
 
-            formMessage.textContent =
-                data.mensaje ||
-                "No fue posible crear la reserva.";
+            if (formMessage) {
+                // Aplicar estilo rojo explícito al mensaje de error
+                formMessage.style.color = "#dc3545";
+                formMessage.style.fontWeight = "bold";
+                formMessage.textContent =
+                    data.mensaje ||
+                    "No fue posible crear la reserva.";
+            }
 
             if (response.status === 401) {
                 cerrarSesion();
@@ -368,8 +360,11 @@ async function enviarReserva() {
             error
         );
 
-        formMessage.textContent =
-            "No se pudo conectar con el servidor.";
+        if (formMessage) {
+            formMessage.style.color = "#dc3545"; // Color rojo de error
+            formMessage.textContent =
+                "No se pudo conectar con el servidor.";
+        }
 
     } finally {
 
@@ -409,7 +404,7 @@ async function cargarReservas() {
         if (!response.ok) {
 
             container.innerHTML =
-                `<p>${escaparHtml(data.mensaje || "No fue posible cargar las reservas.")}</p>`;
+                `<p style="color: #dc3545;">${escaparHtml(data.mensaje || "No fue posible cargar las reservas.")}</p>`;
 
             if (response.status === 401) {
                 cerrarSesion();
@@ -418,10 +413,26 @@ async function cargarReservas() {
             return;
         }
 
-        const reservations =
+        const rawReservations =
             Array.isArray(data.reservations)
                 ? data.reservations
                 : [];
+
+        const now = new Date();
+
+        const reservations = rawReservations.filter(reservation => {
+            const estado = (reservation.estado || "").toLowerCase();
+            if (estado === "cancelada") {
+                return false;
+            }
+
+            const fechaFin = new Date(reservation.fecha_fin);
+            if (Number.isNaN(fechaFin.getTime())) {
+                return true;
+            }
+
+            return fechaFin > now;
+        });
 
         actualizarEstadisticas(
             reservations
@@ -460,10 +471,7 @@ async function cargarReservas() {
                 const estadoReserva = (reservation.estado || "pendiente").toLowerCase();
                 const estadoClase = `badge-status badge-${estadoReserva}`;
 
-                // Reglas actualizadas:
-                // Solo se puede EDITAR si la reserva está 'pendiente'
                 const sePuedeEditar = estadoReserva === "pendiente";
-                // Se puede CANCELAR si está 'pendiente' o 'confirmada'
                 const sePuedeCancelar = estadoReserva === "pendiente" || estadoReserva === "confirmada";
 
                 element.innerHTML = `
@@ -560,7 +568,7 @@ async function cargarReservas() {
         );
 
         container.innerHTML =
-            "<p>Error conectando con el servidor.</p>";
+            "<p style='color: #dc3545;'>Error conectando con el servidor.</p>";
     }
 }
 
@@ -663,7 +671,6 @@ async function cancelarReserva(reservationId) {
     }
 }
 
-// Función auxiliar para que los propietarios puedan abrir las licencias de sus clientes
 async function abrirLicenciaPropietario(urlDocumento) {
     const token = localStorage.getItem("masterdriver_token");
     try {
@@ -690,7 +697,7 @@ function mostrarNotificacion(mensaje, tipo = "info") {
     }
 
     alertContainer.innerHTML = `
-        <div class="auth-message ${tipo === 'error' ? 'error' : 'success'}">
+        <div class="auth-message ${tipo === 'error' ? 'error' : 'success'}" style="${tipo === 'error' ? 'color: #dc3545; font-weight: bold;' : ''}">
             ${escaparHtml(mensaje)}
         </div>
     `;

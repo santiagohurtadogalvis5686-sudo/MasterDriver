@@ -11,9 +11,9 @@ async function seedDatabase() {
         console.log("================================");
         console.log("");
 
-        console.log("1. Inicializando estructuras de la base de datos...");
+        console.log("1. Inicializando estructuras de las dos bases de datos independientes...");
         await initializeDatabase();
-        console.log("   ✓ Base de datos verificada e inicializada sin datos precargados.");
+        console.log("   ✓ Bases de datos independientes verificadas e inicializadas.");
 
         console.log("");
         console.log("================================");
@@ -24,7 +24,7 @@ async function seedDatabase() {
     } catch (error) {
         console.error("");
         console.error("================================");
-        console.error("   ERROR INICIALIZANDO LA BASE DE DATOS");
+        console.error("   ERROR INICIALIZANDO LAS BASES DE DATOS");
         console.error("================================");
         console.error("");
         console.error(error);
@@ -33,12 +33,11 @@ async function seedDatabase() {
     } finally {
         try {
             await closeDatabase();
-            console.log("Conexión SQLite cerrada.");
+            console.log("Conexiones a ambas bases de datos cerradas correctamente.");
         } catch (error) {
             console.error("Error cerrando SQLite:", error);
         }
     }
 }
 
-// EJECUTAR
 seedDatabase();

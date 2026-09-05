@@ -13,6 +13,31 @@ document.addEventListener("DOMContentLoaded", () => {
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
 
+        // =================================
+        // VALIDACIÓN DE DOCUMENTOS (FRONTEND)
+        // =================================
+        const soatFile = document.querySelector("#soat_archivo")?.files[0];
+        const tecnoFile = document.querySelector("#tecnomecanica_archivo")?.files[0];
+        const tarjetaFile = document.querySelector("#tarjeta_archivo")?.files[0];
+
+        const faltantes = [];
+        if (!soatFile) faltantes.push("el SOAT");
+        if (!tecnoFile) faltantes.push("la Tecnomecánica");
+        if (!tarjetaFile) faltantes.push("la Tarjeta de propiedad");
+
+        if (faltantes.length > 0) {
+            let mensajeError = "";
+            if (faltantes.length === 1) {
+                mensajeError = `Debes adjuntar ${faltantes[0]}.`;
+            } else if (faltantes.length === 2) {
+                mensajeError = `Debes adjuntar ${faltantes[0]} y ${faltantes[1]}.`;
+            } else {
+                mensajeError = `Debes adjuntar ${faltantes[0]}, ${faltantes[1]} y ${faltantes[2]}.`;
+            }
+            alert(mensajeError);
+            return;
+        }
+
         try {
             const formData = new FormData(form);
 
@@ -25,20 +50,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
             formData.set("dias_disponibles", JSON.stringify(dias));
 
-            // =================================
-            // DOCUMENTOS
-            // =================================
-            const soatElem = document.querySelector("#soat");
-            const tecnoElem = document.querySelector("#tecnomecanica");
-            const tarjetaElem = document.querySelector("#tarjeta");
-
-            const documentos = {
-                soat: soatElem ? soatElem.checked : false,
-                tecnomecanica: tecnoElem ? tecnoElem.checked : false,
-                tarjeta_propiedad: tarjetaElem ? tarjetaElem.checked : false
+            // Marca de presencia de documentos en JSON metadata
+            const documentosStatus = {
+                soat: true,
+                tecnomecanica: true,
+                tarjeta_propiedad: true
             };
-
-            formData.set("documentos", JSON.stringify(documentos));
+            formData.set("documentos", JSON.stringify(documentosStatus));
 
             // =================================
             // CONDICIONES DE USO
@@ -59,11 +77,11 @@ document.addEventListener("DOMContentLoaded", () => {
             formData.set("condiciones_uso", JSON.stringify(condiciones));
 
             // =================================
-            // ENVIAR SOLICITUD
+            // ENVIAR SOLICITUD MULTIPART
             // =================================
             const response = await fetch(`${API_URL}/vehicles`, {
                 method: "POST",
-                headers: headersAuth(), // No añadir 'Content-Type', FormData lo ajusta automáticamente con el boundary
+                headers: headersAuthMultipart(),
                 body: formData
             });
 

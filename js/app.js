@@ -35,6 +35,12 @@ function headersAuth() {
     };
 }
 
+function headersAuthMultipart() {
+    return {
+        "Authorization": `Bearer ${obtenerToken()}`
+    };
+}
+
 function usuarioAutenticado() {
     return Boolean(obtenerToken());
 }

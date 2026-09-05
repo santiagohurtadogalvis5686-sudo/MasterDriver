@@ -12,6 +12,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Elementos de la Licencia
     const inputFileFrente = document.getElementById("inputFileFrente");
     const inputFileReverso = document.getElementById("inputFileReverso");
+    const fileNameFrente = document.getElementById("fileNameFrente");
+    const fileNameReverso = document.getElementById("fileNameReverso");
+    const placeholderFrente = document.getElementById("placeholderFrente");
+    const placeholderReverso = document.getElementById("placeholderReverso");
     const imgPreviewFrente = document.getElementById("imgPreviewFrente");
     const imgPreviewReverso = document.getElementById("imgPreviewReverso");
     const btnDeleteFrente = document.getElementById("btnDeleteFrente");
@@ -29,9 +33,18 @@ document.addEventListener("DOMContentLoaded", () => {
     renderUser(storedUser);
     loadProfile(token);
 
-    // Eventos de previsualización local
-    inputFileFrente.addEventListener("change", (e) => handleFileSelect(e, imgPreviewFrente));
-    inputFileReverso.addEventListener("change", (e) => handleFileSelect(e, imgPreviewReverso));
+    // Eventos de previsualización local y etiqueta de nombre de archivo
+    inputFileFrente.addEventListener("change", (e) => handleFileSelect(e, imgPreviewFrente, fileNameFrente, placeholderFrente));
+    inputFileReverso.addEventListener("change", (e) => handleFileSelect(e, imgPreviewReverso, fileNameReverso, placeholderReverso));
+
+    // Helper para parsear JSON de forma segura ante respuestas HTML del servidor
+    async function safeParseJsonResponse(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("application/json")) {
+            throw new Error("El servidor no devolvió una respuesta JSON válida.");
+        }
+        return await response.json();
+    }
 
     // Guardar Perfil (Nombre, Correo, Teléfono)
     profileForm.addEventListener("submit", async (event) => {
@@ -55,7 +68,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 },
                 body: JSON.stringify({ nombre, correo, telefono })
             });
-            const data = await response.json();
+
+            const data = await safeParseJsonResponse(response);
 
             if (!response.ok || !data.ok) {
                 throw new Error(data.mensaje || "No se pudo actualizar el perfil.");
@@ -70,19 +84,23 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Subir Archivos de Licencia
+    // Subir Archivos de Licencia (OBLIGATORIOS AMBOS DEDOS)
     btnSaveLicense.addEventListener("click", async () => {
         const fileFrente = inputFileFrente.files[0];
         const fileReverso = inputFileReverso.files[0];
 
-        if (!fileFrente && !fileReverso) {
-            showMessage("Selecciona al menos un documento (frente o reverso) para subir.", "error");
+        // Se exige que ambos lados estén cargados en el input
+        if (!fileFrente || !fileReverso) {
+            showMessage("Debes seleccionar ambos documentos (frente y reverso) para subir tu licencia.", "error");
             return;
         }
 
+        if (!validateFile(fileFrente)) return;
+        if (!validateFile(fileReverso)) return;
+
         const formData = new FormData();
-        if (fileFrente) formData.append("licencia_frente", fileFrente);
-        if (fileReverso) formData.append("licencia_reverso", fileReverso);
+        formData.append("licencia_frente", fileFrente);
+        formData.append("licencia_reverso", fileReverso);
 
         try {
             btnSaveLicense.disabled = true;
@@ -96,14 +114,14 @@ document.addEventListener("DOMContentLoaded", () => {
                 body: formData
             });
 
-            const data = await response.json();
+            const data = await safeParseJsonResponse(response);
+
             if (!response.ok || !data.ok) {
                 throw new Error(data.mensaje || "Error al subir documentos.");
             }
 
             showMessage("Licencia de conducir actualizada correctamente.", "success");
-            inputFileFrente.value = "";
-            inputFileReverso.value = "";
+            resetFileInputs();
             await loadProfile(token);
         } catch (error) {
             showMessage(error.message || "Error al procesar la licencia.", "error");
@@ -113,9 +131,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Eliminar Licencia Frente
+    // Eliminar Licencias
     btnDeleteFrente.addEventListener("click", () => deleteLicenseSide("frente"));
-    // Eliminar Licencia Reverso
     btnDeleteReverso.addEventListener("click", () => deleteLicenseSide("reverso"));
 
     async function deleteLicenseSide(side) {
@@ -126,7 +143,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: "DELETE",
                 headers: { Authorization: `Bearer ${token}` }
             });
-            const data = await response.json();
+
+            const data = await safeParseJsonResponse(response);
 
             if (!response.ok || !data.ok) {
                 throw new Error(data.mensaje || "Error al eliminar el documento.");
@@ -144,12 +162,14 @@ document.addEventListener("DOMContentLoaded", () => {
             const response = await fetch("/api/profile", {
                 headers: { Authorization: `Bearer ${sessionToken}` }
             });
-            const data = await response.json();
 
             if (response.status === 401) {
                 btnLogout.click();
                 return;
             }
+
+            const data = await safeParseJsonResponse(response);
+
             if (response.ok && data.ok && data.user) {
                 const user = { ...readStoredUser(), ...data.user };
                 localStorage.setItem("masterdriver_usuario", JSON.stringify(user));
@@ -179,56 +199,104 @@ document.addEventListener("DOMContentLoaded", () => {
         profileHeaderEmail.textContent = user.correo || "";
         avatarInitials.textContent = nombre.charAt(0).toUpperCase();
 
-        // Renderizar previsualización segura de Frente
+        // Renderizar Frente
         if (user.licencia_frente) {
-            fetchAuthenticatedImage(user.licencia_frente, imgPreviewFrente);
+            fetchAuthenticatedImage(user.licencia_frente, imgPreviewFrente, placeholderFrente);
             btnDeleteFrente.style.display = "inline-block";
         } else {
             imgPreviewFrente.hidden = true;
             imgPreviewFrente.src = "";
+            placeholderFrente.style.display = "block";
             btnDeleteFrente.style.display = "none";
         }
 
-        // Renderizar previsualización segura de Reverso
+        // Renderizar Reverso
         if (user.licencia_reverso) {
-            fetchAuthenticatedImage(user.licencia_reverso, imgPreviewReverso);
+            fetchAuthenticatedImage(user.licencia_reverso, imgPreviewReverso, placeholderReverso);
             btnDeleteReverso.style.display = "inline-block";
         } else {
             imgPreviewReverso.hidden = true;
             imgPreviewReverso.src = "";
+            placeholderReverso.style.display = "block";
             btnDeleteReverso.style.display = "none";
         }
     }
 
-    // Carga de imágenes protegidas mediante petición autenticada Blob
-    async function fetchAuthenticatedImage(url, imgElement) {
+    async function fetchAuthenticatedImage(url, imgElement, placeholderElement) {
         try {
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            if (response.ok) {
+
+            const contentType = response.headers.get("content-type") || "";
+
+            if (response.ok && (contentType.includes("image") || contentType.includes("pdf"))) {
                 const blob = await response.blob();
                 const objectUrl = URL.createObjectURL(blob);
                 imgElement.src = objectUrl;
                 imgElement.hidden = false;
+                if (placeholderElement) placeholderElement.style.display = "none";
             } else {
                 imgElement.hidden = true;
+                if (placeholderElement) placeholderElement.style.display = "block";
             }
         } catch (_) {
             imgElement.hidden = true;
+            if (placeholderElement) placeholderElement.style.display = "block";
         }
     }
 
-    function handleFileSelect(event, imgElement) {
+    function handleFileSelect(event, imgElement, nameLabel, placeholderElement) {
         const file = event.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                imgElement.src = e.target.result;
-                imgElement.hidden = false;
-            };
-            reader.readAsDataURL(file);
+            if (!validateFile(file)) {
+                event.target.value = "";
+                nameLabel.textContent = "Ningún archivo seleccionado";
+                return;
+            }
+            nameLabel.textContent = file.name;
+            if (file.type.startsWith("image/")) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imgElement.src = e.target.result;
+                    imgElement.hidden = false;
+                    if (placeholderElement) placeholderElement.style.display = "none";
+                };
+                reader.readAsDataURL(file);
+            } else {
+                imgElement.hidden = true;
+                if (placeholderElement) {
+                    placeholderElement.textContent = `Archivo seleccionado: ${file.name}`;
+                    placeholderElement.style.display = "block";
+                }
+            }
+        } else {
+            nameLabel.textContent = "Ningún archivo seleccionado";
         }
+    }
+
+    function validateFile(file) {
+        const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+        const maxSize = 5 * 1024 * 1024; // 5 MB
+
+        if (!allowedTypes.includes(file.type)) {
+            showMessage(`El archivo "${file.name}" no es válido. Solo JPG, PNG, WEBP o PDF.`, "error");
+            return false;
+        }
+
+        if (file.size > maxSize) {
+            showMessage(`El archivo "${file.name}" excede el límite de 5 MB.`, "error");
+            return false;
+        }
+
+        return true;
+    }
+
+    function resetFileInputs() {
+        inputFileFrente.value = "";
+        inputFileReverso.value = "";
+        fileNameFrente.textContent = "Ningún archivo seleccionado";
+        fileNameReverso.textContent = "Ningún archivo seleccionado";
     }
 
     function showMessage(text, type) {

@@ -1,9 +1,4 @@
-document.addEventListener(
-    "DOMContentLoaded",
-    cargarVehiculos
-);
-
-let todosLosVehiculos = []; 
+let todosLosVehiculos = [];
 
 document.addEventListener("DOMContentLoaded", () => {
     cargarVehiculos();
@@ -40,7 +35,6 @@ async function cargarVehiculos() {
             return;
         }
 
-        // Renderizar todos los vehículos inicialmente
         renderizarVehiculos(todosLosVehiculos);
 
     } catch (error) {
@@ -105,8 +99,19 @@ function crearTarjetaVehiculo(vehicle) {
     const card = document.createElement("article");
     card.className = "vehicle-card";
 
-    const imagen = Array.isArray(vehicle.fotografias) && vehicle.fotografias.length > 0
-        ? vehicle.fotografias[0]
+    let fotos = [];
+    if (typeof vehicle.fotografias === "string") {
+        try {
+            fotos = JSON.parse(vehicle.fotografias);
+        } catch (e) {
+            fotos = [];
+        }
+    } else if (Array.isArray(vehicle.fotografias)) {
+        fotos = vehicle.fotografias;
+    }
+
+    const imagen = fotos.length > 0
+        ? fotos[0]
         : "https://via.placeholder.com/500x300?text=Sin+imagen";
 
     const whatsapp = vehicle.whatsapp
@@ -154,7 +159,7 @@ function crearTarjetaVehiculo(vehicle) {
 
             <button
                 type="button"
-                class="btn btn-primary btn-full"
+                class="btn btn-primary btn-full btn-reserve-action"
                 data-vehicle-id="${Number(vehicle.id)}"
                 style="margin-top: 12px;"
             >
@@ -165,8 +170,10 @@ function crearTarjetaVehiculo(vehicle) {
         </div>
     `;
 
-    const reservationButton = card.querySelector("[data-vehicle-id]");
-    reservationButton.addEventListener("click", () => reservarVehiculo(vehicle.id));
+    const reservationButton = card.querySelector(".btn-reserve-action");
+    if (reservationButton) {
+        reservationButton.addEventListener("click", () => reservarVehiculo(vehicle.id));
+    }
 
     return card;
 }

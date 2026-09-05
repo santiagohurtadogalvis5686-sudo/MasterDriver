@@ -22,8 +22,8 @@
             <a href="catalog.html">Catálogo</a>
             <a href="my-publications.html">Mis Publicaciones</a>
             <a href="publish.html" class="active">Publicar vehículo</a>
-            <a href="profile.html" >Perfil</a>
-            <a href="reservations.html" >Reservaciones</a>
+            <a href="profile.html">Perfil</a>
+            <a href="reservations.html">Reservaciones</a>
         </nav>
 
         <button class="btn btn-primary" onclick="cerrarSesion()">
@@ -153,29 +153,24 @@
             </label>
 
             <!-- ============================= -->
-            <!-- DOCUMENTOS -->
+            <!-- DOCUMENTOS (OBLIGATORIOS) -->
             <!-- ============================= -->
 
-            <h2>Documentos</h2>
+            <h2>Documentos del Vehículo (Obligatorios)</h2>
 
-            <label class="checkbox-label">
-                <input type="checkbox" id="soat" value="true">
-                SOAT vigente
-            </label>
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="tecnomecanica" value="true">
-                Tecnomecánica vigente
-            </label>
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="tarjeta" value="true">
-                Tarjeta de propiedad
+            <label>
+                SOAT vigente *
+                <input type="file" id="soat_archivo" name="soat_archivo" accept="image/jpeg,image/png,image/webp,application/pdf" required>
             </label>
 
             <label>
-                Cargar documentos
-                <input type="file" id="documentos_archivos" name="documentos_archivos" multiple>
+                Tecnomecánica vigente *
+                <input type="file" id="tecnomecanica_archivo" name="tecnomecanica_archivo" accept="image/jpeg,image/png,image/webp,application/pdf" required>
+            </label>
+
+            <label>
+                Tarjeta de propiedad *
+                <input type="file" id="tarjeta_archivo" name="tarjeta_archivo" accept="image/jpeg,image/png,image/webp,application/pdf" required>
             </label>
 
             <!-- ============================= -->

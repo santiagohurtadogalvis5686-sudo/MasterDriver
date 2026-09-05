@@ -81,16 +81,44 @@ async function cargarMisVehiculos() {
     }
 }
 
+function obtenerUrlImagenVehiculo(vehicle) {
+    const placeholder = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='300' height='200' viewBox='0 0 300 200'><rect width='100%' height='100%' fill='%23e9ecef'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='16' fill='%236c757d'>Sin Imagen</text></svg>";
+
+    if (!vehicle || !vehicle.fotografias) {
+        return placeholder;
+    }
+
+    let fotos = [];
+
+    if (Array.isArray(vehicle.fotografias)) {
+        fotos = vehicle.fotografias;
+    } else if (typeof vehicle.fotografias === "string") {
+        try {
+            const parsed = JSON.parse(vehicle.fotografias);
+            if (Array.isArray(parsed)) {
+                fotos = parsed;
+            } else if (typeof parsed === "string" && parsed.trim() !== "") {
+                fotos = [parsed];
+            }
+        } catch (e) {
+            if (vehicle.fotografias.trim() !== "") {
+                fotos = [vehicle.fotografias];
+            }
+        }
+    }
+
+    if (fotos.length > 0 && typeof fotos[0] === "string" && fotos[0].trim() !== "") {
+        return fotos[0];
+    }
+
+    return placeholder;
+}
+
 function crearTarjetaVehiculo(vehicle) {
     const card = document.createElement("article");
     card.className = "vehicle-card";
 
-    const image =
-        Array.isArray(vehicle.fotografias) &&
-        vehicle.fotografias.length > 0
-            ? vehicle.fotografias[0]
-            : "https://via.placeholder.com/300x200?text=Sin+Imagen";
-
+    const image = obtenerUrlImagenVehiculo(vehicle);
     const price = Number(vehicle.precio) || 0;
 
     card.innerHTML = `
@@ -99,6 +127,7 @@ function crearTarjetaVehiculo(vehicle) {
                 src="${escaparHtml(image)}"
                 alt="${escaparHtml(vehicle.titulo)}"
                 style="width: 100%; height: 180px; object-fit: cover;"
+                onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'300\\' height=\\'200\\' viewBox=\\'0 0 300 200\\'><rect width=\\'100%\\' height=\\'100%\\' fill=\\'%23e9ecef\\'/><text x=\\'50%\\' y=\\'50%\\' dominant-baseline=\\'middle\\' text-anchor=\\'middle\\' font-family=\\'sans-serif\\' font-size=\\'16\\' fill=\\'%236c757d\\'>Sin Imagen</text></svg>'"
             >
         </div>
 
@@ -181,15 +210,30 @@ async function cargarReservasRecibidas() {
             return;
         }
 
-        const reservations = Array.isArray(data.reservations)
+        const rawReservations = Array.isArray(data.reservations)
             ? data.reservations
             : [];
+
+        const ahora = new Date();
+
+        // Filtrar reservas que NO hayan expirado en fecha + hora
+        const reservations = rawReservations.filter(reservation => {
+            if (!reservation.fecha_fin) return true;
+
+            const fechaFin = new Date(reservation.fecha_fin);
+
+            if (Number.isNaN(fechaFin.getTime())) {
+                return true;
+            }
+
+            return fechaFin > ahora;
+        });
 
         container.innerHTML = "";
 
         if (reservations.length === 0) {
             container.innerHTML =
-                "<p>No tienes solicitudes de reserva recibidas.</p>";
+                "<p>No tienes solicitudes de reserva activas o vigentes.</p>";
 
             return;
         }
