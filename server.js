@@ -124,6 +124,16 @@ function authenticateToken(req, res, next) {
     });
 }
 
+// HELPER PARA OBTENER O CREAR CARTERA DE USUARIO
+async function obtenerOCrearCartera(userId) {
+    let wallet = await usersDb.get("SELECT * FROM wallets WHERE user_id = ?", [userId]);
+    if (!wallet) {
+        await usersDb.run("INSERT INTO wallets (user_id, saldo) VALUES (?, 0.0)", [userId]);
+        wallet = await usersDb.get("SELECT * FROM wallets WHERE user_id = ?", [userId]);
+    }
+    return wallet;
+}
+
 // =====================================================
 // RUTAS DE AUTENTICACIÓN Y PERFIL (Usa DB 1: usersDb)
 // =====================================================
@@ -178,6 +188,9 @@ app.post("/api/register", async (req, res) => {
             [nombre, correo, password, telefono || ""]
         );
 
+        // Inicializar cartera en 0 al registrar
+        await usersDb.run("INSERT INTO wallets (user_id, saldo) VALUES (?, 0.0)", [result.lastID]);
+
         const token = jwt.sign({ id: result.lastID, correo }, JWT_SECRET, { expiresIn: "24h" });
 
         res.json({
@@ -224,7 +237,6 @@ app.put("/api/profile", authenticateToken, async (req, res) => {
     }
 });
 
-// SUBIR LICENCIA DE CONDUCIR
 app.post("/api/profile/license", authenticateToken, (req, res) => {
     uploadDocuments.fields([
         { name: "licencia_frente", maxCount: 1 },
@@ -266,7 +278,6 @@ app.post("/api/profile/license", authenticateToken, (req, res) => {
     });
 });
 
-// ELIMINAR LADO DE LICENCIA
 app.delete("/api/profile/license/:side", authenticateToken, async (req, res) => {
     const side = req.params.side;
     if (side !== "frente" && side !== "reverso") {
@@ -284,7 +295,6 @@ app.delete("/api/profile/license/:side", authenticateToken, async (req, res) => 
     }
 });
 
-// SERVIR DOCUMENTOS PROTEGIDOS DE LICENCIA
 app.get("/api/documents/licencia/:userId/:side", authenticateToken, async (req, res) => {
     const { userId, side } = req.params;
 
@@ -305,7 +315,6 @@ app.get("/api/documents/licencia/:userId/:side", authenticateToken, async (req, 
             return res.status(404).json({ ok: false, mensaje: "Documento no encontrado." });
         }
 
-        // Limpieza de ruta relativa para prevenir concatenaciones erróneas
         const cleanPath = filePathRelative.replace(/^\/+/, "");
         const absolutePath = path.resolve(__dirname, cleanPath);
 
@@ -317,6 +326,83 @@ app.get("/api/documents/licencia/:userId/:side", authenticateToken, async (req, 
     } catch (error) {
         console.error("Error al servir el documento:", error);
         res.status(500).json({ ok: false, mensaje: "Error al procesar el archivo." });
+    }
+});
+
+// =====================================================
+// RUTAS MÓDULO CARTERA (DB 1: usersDb)
+// =====================================================
+
+app.get("/api/wallet", authenticateToken, async (req, res) => {
+    try {
+        const wallet = await obtenerOCrearCartera(req.user.id);
+        const transactions = await usersDb.all(
+            "SELECT * FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC",
+            [req.user.id]
+        );
+
+        const puedeReservarPropietario = wallet.saldo >= 10000;
+        const estadoMensaje = puedeReservarPropietario 
+            ? "Cartera habilitada" 
+            : "Cartera bloqueada: necesitas tener mínimo $10.000 COP";
+
+        res.json({
+            ok: true,
+            saldo: wallet.saldo,
+            habilitada: puedeReservarPropietario,
+            estado_mensaje: estadoMensaje,
+            transacciones: transactions
+        });
+    } catch (error) {
+        console.error("Error obteniendo información de la cartera:", error);
+        res.status(500).json({ ok: false, mensaje: "Error al consultar la cartera." });
+    }
+});
+
+app.post("/api/wallet/recharge", authenticateToken, async (req, res) => {
+    const { monto, metodo } = req.body;
+    const montoNumerico = parseFloat(monto);
+
+    if (isNaN(montoNumerico) || montoNumerico <= 0) {
+        return res.status(400).json({ ok: false, mensaje: "Monto de recarga inválido." });
+    }
+
+    const metodosValidos = ["PSE", "Nequi", "Daviplata", "Tarjeta de Crédito"];
+    const metodoUsado = metodosValidos.includes(metodo) ? metodo : "PSE";
+
+    try {
+        await usersDb.run("BEGIN TRANSACTION");
+
+        const wallet = await obtenerOCrearCartera(req.user.id);
+        const nuevoSaldo = wallet.saldo + montoNumerico;
+
+        await usersDb.run(
+            "UPDATE wallets SET saldo = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+            [nuevoSaldo, req.user.id]
+        );
+
+        await usersDb.run(
+            `INSERT INTO wallet_transactions (user_id, tipo, monto, saldo_resultante, descripcion) 
+             VALUES (?, 'recarga', ?, ?, ?)`,
+            [
+                req.user.id,
+                montoNumerico,
+                nuevoSaldo,
+                `Recarga simulada mediante ${metodoUsado}`
+            ]
+        );
+
+        await usersDb.run("COMMIT");
+
+        res.json({
+            ok: true,
+            mensaje: `Recarga realizada correctamente. Tu nuevo saldo es de $${nuevoSaldo.toLocaleString("es-CO")} COP.`,
+            nuevoSaldo
+        });
+    } catch (error) {
+        await usersDb.run("ROLLBACK").catch(() => {});
+        console.error("Error en recarga de cartera:", error);
+        res.status(500).json({ ok: false, mensaje: "Error al procesar la recarga." });
     }
 });
 
@@ -344,7 +430,6 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
             dias_disponibles,
             fecha_inicio,
             fecha_fin,
-            documentos,
             condiciones_uso
         } = req.body;
 
@@ -352,7 +437,6 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
             return res.status(400).json({ ok: false, mensaje: "Todos los campos obligatorios deben ser diligenciados." });
         }
 
-        // VALIDACIÓN DE DOCUMENTOS EN EL BACKEND
         const hasSoat = req.files && req.files["soat_archivo"] && req.files["soat_archivo"].length > 0;
         const hasTecno = req.files && req.files["tecnomecanica_archivo"] && req.files["tecnomecanica_archivo"].length > 0;
         const hasTarjeta = req.files && req.files["tarjeta_archivo"] && req.files["tarjeta_archivo"].length > 0;
@@ -373,7 +457,6 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
             ? req.files["fotografias"].map(file => `/uploads/vehicles/${file.filename}`) 
             : [];
 
-        // Construir objeto estructurado de los documentos obligatorios subidos
         const documentosObj = {
             soat: `/uploads/documents/${req.files["soat_archivo"][0].filename}`,
             tecnomecanica: `/uploads/documents/${req.files["tecnomecanica_archivo"][0].filename}`,
@@ -490,8 +573,54 @@ app.delete("/api/vehicles/:id", authenticateToken, async (req, res) => {
 });
 
 // =====================================================
-// RUTAS DE RESERVAS DE CLIENTE (DB 2: vehiclesDb)
+// RUTAS DE RESERVAS Y VALIDACIONES DE CARTERA
 // =====================================================
+
+// CREAR RESERVA - REGLA 3: VALIDACIÓN EN BACKEND DEL SALDO DEL PROPIETARIO
+app.post("/api/reservations", authenticateToken, async (req, res) => {
+    const { vehicle_id, fecha_inicio, fecha_fin, total_pago } = req.body;
+
+    if (!vehicle_id || !fecha_inicio || !fecha_fin || total_pago === undefined) {
+        return res.status(400).json({ ok: false, mensaje: "Todos los datos de la reserva son requeridos." });
+    }
+
+    try {
+        // Obtener el vehículo para identificar al propietario
+        const vehicle = await vehiclesDb.get("SELECT user_id FROM vehicles WHERE id = ?", [vehicle_id]);
+        if (!vehicle) {
+            return res.status(404).json({ ok: false, mensaje: "El vehículo seleccionado ya no está disponible." });
+        }
+
+        const propietarioId = vehicle.user_id;
+
+        // Verificar el saldo actual del propietario en la DB 1
+        const carteraPropietario = await obtenerOCrearCartera(propietarioId);
+
+        if (carteraPropietario.saldo < 10000) {
+            return res.status(400).json({
+                ok: false,
+                mensaje: "Esta reserva no puede realizarse porque el propietario del vehículo tiene menos de $10.000 COP disponibles en su cartera. El propietario debe recargar su cartera para poder aceptar reservas."
+            });
+        }
+
+        // Crear reserva en estado pendiente
+        const result = await vehiclesDb.run(
+            `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado) 
+             VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+            [req.user.id, vehicle_id, fecha_inicio, fecha_fin, parseFloat(total_pago)]
+        );
+
+        res.json({
+            ok: true,
+            mensaje: "Reserva solicitada correctamente.",
+            reservationId: result.lastID
+        });
+
+    } catch (error) {
+        console.error("Error al crear reserva:", error);
+        res.status(500).json({ ok: false, mensaje: "Error al registrar la reserva." });
+    }
+});
 
 app.get("/api/reservations", authenticateToken, async (req, res) => {
     try {
@@ -518,32 +647,64 @@ app.get("/api/reservations", authenticateToken, async (req, res) => {
     }
 });
 
+// CANCELAR RESERVA - REGLA 6 Y 7: DEVOLUCIÓN ATÓMICA DE COMISIÓN AL CANCELAR O EXPIRAR
 app.patch("/api/reservations/:id/cancel", authenticateToken, async (req, res) => {
     const reservationId = req.params.id;
 
     try {
-        const reservation = await vehiclesDb.get("SELECT * FROM reservations WHERE id = ?", [reservationId]);
+        const reservation = await vehiclesDb.get(
+            `SELECT r.*, v.user_id as owner_id 
+             FROM reservations r 
+             JOIN vehicles v ON r.vehicle_id = v.id 
+             WHERE r.id = ?`,
+            [reservationId]
+        );
 
         if (!reservation) {
             return res.status(404).json({ ok: false, mensaje: "Reserva no encontrada." });
         }
 
-        if (reservation.user_id !== req.user.id) {
+        if (reservation.user_id !== req.user.id && reservation.owner_id !== req.user.id) {
             return res.status(403).json({ ok: false, mensaje: "No tienes permiso para cancelar esta reserva." });
         }
 
-        await vehiclesDb.run("UPDATE reservations SET estado = 'cancelada' WHERE id = ?", [reservationId]);
+        // Si ya se cobró comisión (estado previa confirmación), realizar devolución de manera atómica
+        if (reservation.comision_cobrada === 1) {
+            const montoComision = reservation.total_pago * 0.10;
 
-        res.json({ ok: true, mensaje: "Reserva cancelada correctamente." });
+            await usersDb.run("BEGIN TRANSACTION");
+            const wallet = await obtenerOCrearCartera(reservation.owner_id);
+            const nuevoSaldo = wallet.saldo + montoComision;
+
+            await usersDb.run(
+                "UPDATE wallets SET saldo = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+                [nuevoSaldo, reservation.owner_id]
+            );
+
+            await usersDb.run(
+                `INSERT INTO wallet_transactions (user_id, tipo, monto, saldo_resultante, descripcion, reservation_id) 
+                 VALUES (?, 'devolucion', ?, ?, ?, ?)`,
+                [
+                    reservation.owner_id,
+                    montoComision,
+                    nuevoSaldo,
+                    `Devolución de comisión — Reserva #${reservation.id}`,
+                    reservation.id
+                ]
+            );
+
+            await usersDb.run("COMMIT");
+        }
+
+        await vehiclesDb.run("UPDATE reservations SET estado = 'cancelada', comision_cobrada = 0 WHERE id = ?", [reservationId]);
+
+        res.json({ ok: true, mensaje: "Reserva cancelada correctamente y comisión reembolsada si aplicaba." });
     } catch (error) {
+        await usersDb.run("ROLLBACK").catch(() => {});
         console.error("Error al cancelar la reserva:", error);
         res.status(500).json({ ok: false, mensaje: "Error interno al cancelar la reserva." });
     }
 });
-
-// =====================================================
-// RUTAS DE RESERVAS Y NAVEGACIÓN CRUZADA (DB 1 y DB 2)
-// =====================================================
 
 app.put("/api/reservations/:id", authenticateToken, async (req, res) => {
     const reservationId = req.params.id;
@@ -643,17 +804,88 @@ app.get("/api/owner/reservations", authenticateToken, async (req, res) => {
     }
 });
 
+// CAMBIO DE ESTADO DE RESERVA POR EL PROPIETARIO - REGLA 4 Y 5: COBRO ATÓMICO DE COMISIÓN DEL 10%
 app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, res) => {
     const { estado } = req.body;
+    const reservationId = req.params.id;
+
     try {
-        await vehiclesDb.run("UPDATE reservations SET estado = ? WHERE id = ?", [estado, req.params.id]);
+        const reservation = await vehiclesDb.get(
+            `SELECT r.*, v.user_id as owner_id 
+             FROM reservations r 
+             JOIN vehicles v ON r.vehicle_id = v.id 
+             WHERE r.id = ?`,
+            [reservationId]
+        );
+
+        if (!reservation) {
+            return res.status(404).json({ ok: false, mensaje: "Reserva no encontrada." });
+        }
+
+        if (reservation.owner_id !== req.user.id) {
+            return res.status(403).json({ ok: false, mensaje: "No estás autorizado para modificar el estado de esta reserva." });
+        }
+
+        // LÓGICA DE COBRO AL CONFIRMAR LA RESERVA
+        if (estado === "confirmada" && reservation.estado !== "confirmada") {
+            const cartera = await obtenerOCrearCartera(req.user.id);
+            const montoComision = reservation.total_pago * 0.10;
+
+            if (cartera.saldo < 10000) {
+                return res.status(400).json({
+                    ok: false,
+                    mensaje: "No puedes confirmar esta reserva porque tienes menos de $10.000 COP en tu cartera. Recarga tu cartera para continuar."
+                });
+            }
+
+            if (cartera.saldo < montoComision) {
+                return res.status(400).json({
+                    ok: false,
+                    mensaje: `Saldo insuficiente para cubrir la comisión del 10% ($${montoComision.toLocaleString("es-CO")} COP).`
+                });
+            }
+
+            // Operación Atómica en DB 1 y actualización en DB 2
+            await usersDb.run("BEGIN TRANSACTION");
+            const nuevoSaldo = cartera.saldo - montoComision;
+
+            await usersDb.run(
+                "UPDATE wallets SET saldo = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+                [nuevoSaldo, req.user.id]
+            );
+
+            await usersDb.run(
+                `INSERT INTO wallet_transactions (user_id, tipo, monto, saldo_resultante, descripcion, reservation_id) 
+                 VALUES (?, 'comision', ?, ?, ?, ?)`,
+                [
+                    req.user.id,
+                    montoComision,
+                    nuevoSaldo,
+                    `Comisión por reserva #${reservation.id}`,
+                    reservation.id
+                ]
+            );
+
+            await usersDb.run("COMMIT");
+            await vehiclesDb.run("UPDATE reservations SET estado = 'confirmada', comision_cobrada = 1 WHERE id = ?", [reservationId]);
+
+            return res.json({
+                ok: true,
+                mensaje: `Reserva confirmada. Se descontó una comisión de $${montoComision.toLocaleString("es-CO")} COP de la cartera del propietario.`
+            });
+        }
+
+        await vehiclesDb.run("UPDATE reservations SET estado = ? WHERE id = ?", [estado, reservationId]);
         res.json({ ok: true, mensaje: "Estado de la reserva actualizado." });
+
     } catch (error) {
+        await usersDb.run("ROLLBACK").catch(() => {});
+        console.error("Error cambiando estado de reserva:", error);
         res.status(500).json({ ok: false, mensaje: "Error actualizando estado de la reserva." });
     }
 });
 
-// Middleware para rutas de API no encontradas (Evita responder con el HTML de index)
+// Middleware para rutas de API no encontradas
 app.use("/api/*", (req, res) => {
     res.status(404).json({ ok: false, mensaje: "Ruta de la API no encontrada." });
 });

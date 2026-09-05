@@ -61,14 +61,31 @@ async function initializeDatabase() {
 
         for (const statement of schemaStatements) {
             const trimmed = statement.trim();
-            if (trimmed.includes("users") || trimmed.includes("sessions")) {
+            if (
+                trimmed.includes("users") || 
+                trimmed.includes("sessions") || 
+                trimmed.includes("wallets") || 
+                trimmed.includes("wallet_transactions") ||
+                trimmed.includes("idx_wallet")
+            ) {
                 await usersDb.exec(trimmed);
-            } else if (trimmed.includes("vehicles") || trimmed.includes("reservations") || trimmed.includes("idx_")) {
+            } else if (
+                trimmed.includes("vehicles") || 
+                trimmed.includes("reservations") || 
+                trimmed.includes("idx_")
+            ) {
                 await vehiclesDb.exec(trimmed);
             }
         }
 
-        console.log("Bases de datos 'database_users.db' y 'database_vehicles.db' creadas/verificadas.");
+        // Migración preventiva: Garantizar columna comision_cobrada en reservations si la BD ya existía
+        try {
+            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN comision_cobrada INTEGER DEFAULT 0");
+        } catch (e) {
+            // La columna ya existe, ignorar error
+        }
+
+        console.log("Bases de datos 'database_users.db' y 'database_vehicles.db' creadas/verificadas correctamente.");
     } catch (error) {
         console.error("Error inicializando las bases de datos:", error);
         throw error;

@@ -1,5 +1,5 @@
 -- =====================================================
--- ESQUEMA BASE DE DATOS 1: USERS (users.db)
+-- ESQUEMA BASE DE DATOS 1: USERS (database_users.db)
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -23,8 +23,33 @@ CREATE TABLE IF NOT EXISTS sessions (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS wallets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL UNIQUE,
+    saldo REAL NOT NULL DEFAULT 0.0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS wallet_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    tipo TEXT NOT NULL, -- 'recarga', 'comision', 'devolucion'
+    monto REAL NOT NULL,
+    saldo_resultante REAL NOT NULL,
+    descripcion TEXT NOT NULL,
+    reservation_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_wallets_user ON wallets(user_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_user ON wallet_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_res ON wallet_transactions(reservation_id);
+
 -- =====================================================
--- ESQUEMA BASE DE DATOS 2: VEHICLES (vehicles.db)
+-- ESQUEMA BASE DE DATOS 2: VEHICLES (database_vehicles.db)
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS vehicles (
@@ -53,6 +78,7 @@ CREATE TABLE IF NOT EXISTS reservations (
     estado TEXT NOT NULL DEFAULT 'pendiente',
     editado_por_cliente INTEGER DEFAULT 0,
     total_pago REAL NOT NULL DEFAULT 0,
+    comision_cobrada INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
 );
