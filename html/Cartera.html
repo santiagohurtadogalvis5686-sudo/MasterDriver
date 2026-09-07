@@ -1,33 +1,40 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MasterDriver - Mi Cartera</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>Mi cartera - MasterDriver</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="icon" type="image/png" href="/static/logo.png">
 </head>
+
 <body>
 
-    <!-- NAV BAR -->
     <header class="navbar">
-        <div class="logo-container">
-            <a href="index.html" class="logo">MasterDriver</a>
-        </div>
+        <a href="/index.html" class="logo">
+            MASTER<span>DRIVER</span>
+        </a>
+
         <nav class="nav-links">
-            <a href="catalog.html">Vehículos</a>
-            <a href="reservations.html">Mis Reservas</a>
-            <a href="Cartera.html" class="active">Mi Cartera</a>
+            <a href="/index.html">Inicio</a>
+            <a href="/html/catalog.html">Catálogo</a>
+            <a href="/html/my-publications.html">Mis Publicaciones</a>
+            <a href="/html/publish.html">Publicar vehículo</a>
+            <a href="/html/profile.html">Perfil</a>
+            <a href="/html/reservations.html">Reservaciones</a>
+            <a href="/html/Cartera.html" class="active">Mi Cartera</a>
             <div id="authNavContainer" class="auth-buttons">
                 <!-- Se inyecta dinámicamente por JS -->
             </div>
         </nav>
+
     </header>
 
-    <main class="main-container">
+    <main class="page-container">
         <div class="wallet-wrapper">
             <div class="page-header">
-                <h2>Mi Cartera Digital</h2>
+                <h1>Mi Cartera Digital</h1>
                 <p>Gestiona tu saldo para publicar y aceptar reservas en la plataforma.</p>
             </div>
 
@@ -35,13 +42,13 @@
             <div class="wallet-summary-card">
                 <div class="wallet-balance-info">
                     <span class="balance-label">Saldo Disponible</span>
-                    <h1 id="walletBalanceDisplay" class="balance-amount">$0 COP</h1>
+                    <h2 id="walletBalanceDisplay" class="balance-amount">$0 COP</h2>
                     <div id="walletStatusBadge" class="wallet-status-badge status-loading">
                         Cargando estado...
                     </div>
                 </div>
                 <div class="wallet-actions">
-                    <button id="btnOpenRechargeModal" class="btn btn-primary btn-large">
+                    <button id="btnOpenRechargeModal" class="btn btn-primary">
                         + Recargar Saldo
                     </button>
                 </div>
@@ -110,6 +117,7 @@
     <!-- NOTIFICACIONES TOAST -->
     <div id="toastContainer" class="toast-container"></div>
 
-    <script src="js/Cartera.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/Cartera.js"></script>
 </body>
 </html>

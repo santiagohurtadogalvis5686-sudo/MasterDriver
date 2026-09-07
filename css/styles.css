@@ -1081,6 +1081,254 @@ button:disabled {
 }
 
 
+/* =====================================================
+   MÓDULO CARTERA (RESTRUCTURADO)
+   ===================================================== */
+
+.wallet-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.wallet-summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 2.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.balance-label {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.balance-amount {
+    font-size: 42px;
+    margin: 8px 0;
+    font-weight: 800;
+    color: var(--text);
+}
+
+.wallet-status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.status-active {
+    background: rgba(155, 229, 27, 0.15);
+    color: var(--primary);
+    border: 1px solid rgba(155, 229, 27, 0.3);
+}
+
+.status-blocked {
+    background: rgba(255, 93, 93, 0.15);
+    color: var(--danger);
+    border: 1px solid rgba(255, 93, 93, 0.3);
+}
+
+.status-loading {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid var(--border);
+}
+
+/* ALERTAS DE CARTERA */
+.alert-box {
+    padding: 1rem 1.25rem;
+    border-radius: 10px;
+    font-size: 14px;
+}
+
+.alert-info {
+    background-color: rgba(37, 99, 235, 0.1);
+    border-left: 4px solid #2563eb;
+    color: #93c5fd;
+}
+
+.alert-warning {
+    background-color: rgba(245, 158, 11, 0.1);
+    border-left: 4px solid #f59e0b;
+    color: #fde047;
+}
+
+.alert-success {
+    background-color: rgba(155, 229, 27, 0.1);
+    border-left: 4px solid var(--primary);
+    color: var(--primary);
+}
+
+.hidden {
+    display: none !important;
+}
+
+/* TABLA DE TRANSACCIONES DE CARTERA */
+.wallet-history-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    border-radius: var(--radius);
+}
+
+.wallet-history-section h3 {
+    margin-bottom: 1.5rem;
+    font-size: 20px;
+}
+
+.table-responsive {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th, 
+.data-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+
+.data-table th {
+    background-color: var(--surface-light);
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.tx-badge {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.badge-type-recharge {
+    background-color: rgba(155, 229, 27, 0.15);
+    color: var(--primary);
+}
+
+.badge-type-commission {
+    background-color: rgba(255, 93, 93, 0.15);
+    color: var(--danger);
+}
+
+.badge-type-refund {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+}
+
+.amount-positive {
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.amount-negative {
+    color: var(--danger);
+    font-weight: 700;
+}
+
+.text-center {
+    text-align: center;
+}
+
+/* MODALES Y TOASTS DE CARTERA */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-content {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2rem;
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 450px;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.modal-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2rem;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 1rem;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.close-btn:hover {
+    color: var(--text);
+}
+
+.form-help {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 2000;
+}
+
+.toast {
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.toast-success { background-color: var(--primary-dark); color: #000; }
+.toast-error { background-color: var(--danger); }
+.toast-info { background-color: #2563eb; }
+
+
 /* =========================================
    RESPONSIVE
 ========================================= */
@@ -1181,229 +1429,8 @@ button:disabled {
         padding: 20px;
     }
 
-    /* =====================================================
-   ESTILOS GENERALES Y NAVEGACIÓN
-   ===================================================== */
-:root {
-    --primary-color: #2563eb;
-    --primary-hover: #1d4ed8;
-    --bg-color: #f8fafc;
-    --card-bg: #ffffff;
-    --text-primary: #1e293b;
-    --text-secondary: #64748b;
-    --border-color: #e2e8f0;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --danger-color: #ef4444;
-}
-
-body {
-    margin: 0;
-    font-family: 'Inter', sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-primary);
-}
-
-.main-container {
-    max-width: 1100px;
-    margin: 2rem auto;
-    padding: 0 1.5rem;
-}
-
-/* =====================================================
-   ESTILOS ESPECÍFICOS MÓDULO CARTERA
-   ===================================================== */
-.wallet-wrapper {
-    display: flex;
-    flex-direction: column;
-    gap: 1.5rem;
-}
-
-.wallet-summary-card {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-    color: #ffffff;
-    padding: 2rem;
-    border-radius: 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-.balance-label {
-    font-size: 0.9rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #94a3b8;
-}
-
-.balance-amount {
-    font-size: 2.5rem;
-    margin: 0.5rem 0;
-    font-weight: 700;
-}
-
-.wallet-status-badge {
-    display: inline-block;
-    padding: 0.25rem 0.75rem;
-    border-radius: 9999px;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.status-active {
-    background-color: rgba(16, 185, 129, 0.2);
-    color: #34d399;
-    border: 1px solid #059669;
-}
-
-.status-blocked {
-    background-color: rgba(239, 68, 68, 0.2);
-    color: #f87171;
-    border: 1px solid #dc2626;
-}
-
-/* ALERTAS */
-.alert-box {
-    padding: 1rem 1.25rem;
-    border-radius: 8px;
-    font-size: 0.95rem;
-}
-
-.alert-info {
-    background-color: #eff6ff;
-    border-left: 4px solid var(--primary-color);
-    color: #1e40af;
-}
-
-.alert-warning {
-    background-color: #fffbebfb;
-    border-left: 4px solid var(--warning-color);
-    color: #92400e;
-}
-
-.alert-success {
-    background-color: #ecfdf5;
-    border-left: 4px solid var(--success-color);
-    color: #065f46;
-}
-
-/* TABLA DE TRANSACCIONES */
-.wallet-history-section {
-    background: var(--card-bg);
-    padding: 1.5rem;
-    border-radius: 10px;
-    border: 1px solid var(--border-color);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1rem;
-}
-
-.data-table th, .data-table td {
-    padding: 0.85rem 1rem;
-    text-align: left;
-    border-bottom: 1px solid var(--border-color);
-}
-
-.data-table th {
-    background-color: #f1f5f9;
-    color: var(--text-secondary);
-    font-weight: 600;
-}
-
-.tx-badge {
-    padding: 0.2rem 0.6rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 700;
-}
-
-.badge-type-recharge {
-    background-color: #d1fae5;
-    color: #065f46;
-}
-
-.badge-type-commission {
-    background-color: #fee2e2;
-    color: #991b1b;
-}
-
-.badge-type-refund {
-    background-color: #e0f2fe;
-    color: #075985;
-}
-
-.amount-positive {
-    color: var(--success-color);
-    font-weight: 600;
-}
-
-.amount-negative {
-    color: var(--danger-color);
-    font-weight: 600;
-}
-
-/* MODALES */
-.modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: rgba(0,0,0,0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal.hidden {
-    display: none;
-}
-
-.modal-content {
-    background: #ffffff;
-    padding: 2rem;
-    border-radius: 10px;
-    width: 100%;
-    max-width: 450px;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-}
-
-/* TOASTS */
-.toast-container {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    z-index: 2000;
-}
-
-.toast {
-    padding: 1rem 1.5rem;
-    border-radius: 6px;
-    color: #fff;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-}
-
-.toast-success { background-color: var(--success-color); }
-.toast-error { background-color: var(--danger-color); }
-.toast-info { background-color: var(--primary-color); }
+    .wallet-summary-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
 }
