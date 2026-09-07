@@ -18,10 +18,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnCloseRechargeModal = document.getElementById("btnCloseRechargeModal");
     const btnCancelRecharge = document.getElementById("btnCancelRecharge");
     const rechargeForm = document.getElementById("rechargeForm");
-    const authNavContainer = document.getElementById("authNavContainer");
-
-    // Inicialización del Nav
-    renderAuthNav();
 
     // Cargar información de la cartera al iniciar
     cargarCartera();
@@ -198,29 +194,6 @@ document.addEventListener("DOMContentLoaded", () => {
                     </tr>
                 `;
             }).join("");
-        }
-    }
-
-    function renderAuthNav() {
-        if (!authNavContainer) return;
-        const userStr = localStorage.getItem("masterdriver_usuario") || localStorage.getItem("user");
-        const user = userStr ? JSON.parse(userStr) : null;
-
-        if (user) {
-            authNavContainer.innerHTML = `
-                <span class="user-greeting">Hola, ${user.nombre}</span>
-                <button id="btnLogout" class="btn btn-secondary btn-sm">Cerrar Sesión</button>
-            `;
-            const btnLogout = document.getElementById("btnLogout");
-            if (btnLogout) {
-                btnLogout.addEventListener("click", () => {
-                    localStorage.removeItem("masterdriver_token");
-                    localStorage.removeItem("masterdriver_usuario");
-                    localStorage.removeItem("token");
-                    localStorage.removeItem("user");
-                    window.location.href = "login.html";
-                });
-            }
         }
     }
 

@@ -25,7 +25,7 @@ function guardarSesion(data) {
 function cerrarSesion() {
     localStorage.removeItem("masterdriver_token");
     localStorage.removeItem("masterdriver_usuario");
-    window.location.href = "login.html";
+    window.location.href = "/html/login.html";
 }
 
 function headersAuth() {
@@ -44,3 +44,22 @@ function headersAuthMultipart() {
 function usuarioAutenticado() {
     return Boolean(obtenerToken());
 }
+
+function actualizarNavAutenticacion() {
+    const container = document.getElementById("authNavContainer");
+    if (!container) return;
+
+    if (usuarioAutenticado()) {
+        // Se renderiza vacío dentro del nav-links para no insertar el saludo
+        container.innerHTML = "";
+    } else {
+        container.innerHTML = `
+            <a href="/html/login.html" class="btn btn-secondary">Iniciar sesión</a>
+            <a href="/html/register.html" class="btn btn-primary">Registrarse</a>
+        `;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    actualizarNavAutenticacion();
+});
