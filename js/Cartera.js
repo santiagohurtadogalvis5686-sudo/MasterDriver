@@ -18,9 +18,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnCloseRechargeModal = document.getElementById("btnCloseRechargeModal");
     const btnCancelRecharge = document.getElementById("btnCancelRecharge");
     const rechargeForm = document.getElementById("rechargeForm");
+    const btnClearAllHistory = document.getElementById("btnClearAllHistory");
 
     // Cargar información de la cartera al iniciar
     cargarCartera();
+
+    // Evento: Borrar todo el historial
+    if (btnClearAllHistory) {
+        btnClearAllHistory.addEventListener("click", () => {
+            const confirmacion = confirm("¿Está seguro de que desea eliminar todo el historial? Esta acción no se puede deshacer.");
+            if (confirmacion) {
+                borrarTodoElHistorial();
+            }
+        });
+    }
 
     // Eventos Modal
     if (btnOpenRechargeModal) {
@@ -139,12 +150,21 @@ document.addEventListener("DOMContentLoaded", () => {
             walletAlertBox.classList.remove("hidden");
         }
 
+        // Visibilidad del botón "Borrar todo el historial"
+        if (btnClearAllHistory) {
+            if (data.transacciones && data.transacciones.length > 0) {
+                btnClearAllHistory.classList.remove("hidden");
+            } else {
+                btnClearAllHistory.classList.add("hidden");
+            }
+        }
+
         // Renderizado del Historial de Transacciones
         if (walletTransactionsTable) {
             if (!data.transacciones || data.transacciones.length === 0) {
                 walletTransactionsTable.innerHTML = `
                     <tr>
-                        <td colspan="5" class="text-center empty-msg">No se registran movimientos en tu cartera aún.</td>
+                        <td colspan="6" class="text-center empty-msg">No se registran movimientos en tu cartera aún.</td>
                     </tr>
                 `;
                 return;
@@ -191,9 +211,78 @@ document.addEventListener("DOMContentLoaded", () => {
                             ${signo} ${montoFormateado}
                         </td>
                         <td>${saldoResultanteFormateado}</td>
+                        <td class="text-center">
+                            <button class="btn btn-delete-single" data-id="${tx.id}" title="Eliminar este registro" style="background: transparent; border: none; color: #dc3545; cursor: pointer; font-size: 1.1rem; padding: 2px 6px;">
+                                &#128465;
+                            </button>
+                        </td>
                     </tr>
                 `;
             }).join("");
+
+            // Asignar listeners usando closest para asegurar la captura del data-id
+            document.querySelectorAll(".btn-delete-single").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    const targetBtn = e.target.closest(".btn-delete-single");
+                    const id = targetBtn ? targetBtn.getAttribute("data-id") : null;
+                    if (id) {
+                        const confirmacion = confirm("¿Está seguro de que desea eliminar este registro?");
+                        if (confirmacion) {
+                            borrarRegistroIndividual(id);
+                        }
+                    }
+                });
+            });
+        }
+    }
+
+    // Petición backend: Borrar todo el historial
+    async function borrarTodoElHistorial() {
+        try {
+            const response = await fetch("/api/wallet/transactions", {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.ok) {
+                mostrarToast(data.mensaje, "success");
+                cargarCartera();
+            } else {
+                mostrarToast(data.mensaje || "Error al borrar el historial.", "error");
+            }
+        } catch (error) {
+            console.error("Error eliminando todo el historial:", error);
+            mostrarToast("Error de conexión al eliminar el historial.", "error");
+        }
+    }
+
+    // Petición backend: Borrar un registro individual por ID
+    async function borrarRegistroIndividual(id) {
+        try {
+            const response = await fetch(`/api/wallet/transactions/${id}`, {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.ok) {
+                mostrarToast(data.mensaje, "success");
+                cargarCartera();
+            } else {
+                mostrarToast(data.mensaje || "Error al eliminar el registro.", "error");
+            }
+        } catch (error) {
+            console.error("Error eliminando el registro:", error);
+            mostrarToast("Error de conexión al eliminar el registro.", "error");
         }
     }
 

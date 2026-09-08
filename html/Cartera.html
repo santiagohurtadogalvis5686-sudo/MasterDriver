@@ -64,7 +64,12 @@
 
             <!-- SECCIÓN HISTORIAL DE TRANSACCIONES -->
             <div class="wallet-history-section">
-                <h3>Historial de Movimientos</h3>
+                <div class="history-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="margin: 0;">Historial de Movimientos</h3>
+                    <button id="btnClearAllHistory" class="btn btn-danger hidden" style="background-color: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">
+                        Borrar todo el historial
+                    </button>
+                </div>
                 <div class="table-responsive">
                     <table class="data-table">
                         <thead>
@@ -74,11 +79,12 @@
                                 <th>Descripción</th>
                                 <th>Monto</th>
                                 <th>Saldo Resultante</th>
+                                <th class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="walletTransactionsTable">
                             <tr>
-                                <td colspan="5" class="text-center">Cargando transacciones...</td>
+                                <td colspan="6" class="text-center">Cargando transacciones...</td>
                             </tr>
                         </tbody>
                     </table>

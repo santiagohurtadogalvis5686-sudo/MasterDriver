@@ -406,6 +406,61 @@ app.post("/api/wallet/recharge", authenticateToken, async (req, res) => {
     }
 });
 
+// 1. ELIMINAR UN REGISTRO ESPECÍFICO DEL HISTORIAL POR ID Y USER_ID
+app.delete("/api/wallet/transactions/:id", authenticateToken, async (req, res) => {
+    const transactionId = req.params.id;
+
+    if (!transactionId || isNaN(parseInt(transactionId, 10))) {
+        return res.status(400).json({ ok: false, mensaje: "Identificador de registro no válido." });
+    }
+
+    try {
+        const transaction = await usersDb.get(
+            "SELECT id FROM wallet_transactions WHERE id = ? AND user_id = ?",
+            [transactionId, req.user.id]
+        );
+
+        if (!transaction) {
+            return res.status(404).json({
+                ok: false,
+                mensaje: "El registro no existe o no pertenece a tu cuenta."
+            });
+        }
+
+        await usersDb.run(
+            "DELETE FROM wallet_transactions WHERE id = ? AND user_id = ?",
+            [transactionId, req.user.id]
+        );
+
+        res.json({
+            ok: true,
+            mensaje: "Registro eliminado correctamente del historial."
+        });
+    } catch (error) {
+        console.error("Error al borrar registro de cartera:", error);
+        res.status(500).json({ ok: false, mensaje: "Error de servidor al intentar eliminar el registro." });
+    }
+});
+
+// 2. ELIMINAR TODO EL HISTORIAL DE CARTERA DEL USUARIO AUTENTICADO
+app.delete("/api/wallet/transactions", authenticateToken, async (req, res) => {
+    try {
+        const result = await usersDb.run(
+            "DELETE FROM wallet_transactions WHERE user_id = ?",
+            [req.user.id]
+        );
+
+        res.json({
+            ok: true,
+            mensaje: "Historial de cartera eliminado correctamente.",
+            registrosEliminados: result.changes
+        });
+    } catch (error) {
+        console.error("Error al borrar todo el historial de cartera:", error);
+        res.status(500).json({ ok: false, mensaje: "Error de servidor al intentar eliminar el historial de cartera." });
+    }
+});
+
 // =====================================================
 // RUTAS DE VEHÍCULOS (Usa DB 2: vehiclesDb)
 // =====================================================
@@ -576,7 +631,6 @@ app.delete("/api/vehicles/:id", authenticateToken, async (req, res) => {
 // RUTAS DE RESERVAS Y VALIDACIONES DE CARTERA
 // =====================================================
 
-// CREAR RESERVA - REGLA 3: VALIDACIÓN EN BACKEND DEL SALDO DEL PROPIETARIO
 app.post("/api/reservations", authenticateToken, async (req, res) => {
     const { vehicle_id, fecha_inicio, fecha_fin, total_pago } = req.body;
 
@@ -585,15 +639,12 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
     }
 
     try {
-        // Obtener el vehículo para identificar al propietario
         const vehicle = await vehiclesDb.get("SELECT user_id FROM vehicles WHERE id = ?", [vehicle_id]);
         if (!vehicle) {
             return res.status(404).json({ ok: false, mensaje: "El vehículo seleccionado ya no está disponible." });
         }
 
         const propietarioId = vehicle.user_id;
-
-        // Verificar el saldo actual del propietario en la DB 1
         const carteraPropietario = await obtenerOCrearCartera(propietarioId);
 
         if (carteraPropietario.saldo < 10000) {
@@ -603,7 +654,6 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
             });
         }
 
-        // Crear reserva en estado pendiente
         const result = await vehiclesDb.run(
             `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado) 
              VALUES (?, ?, ?, ?, ?, 'pendiente')`,
@@ -647,7 +697,6 @@ app.get("/api/reservations", authenticateToken, async (req, res) => {
     }
 });
 
-// CANCELAR RESERVA - REGLA 6 Y 7: DEVOLUCIÓN ATÓMICA DE COMISIÓN AL CANCELAR O EXPIRAR
 app.patch("/api/reservations/:id/cancel", authenticateToken, async (req, res) => {
     const reservationId = req.params.id;
 
@@ -668,7 +717,6 @@ app.patch("/api/reservations/:id/cancel", authenticateToken, async (req, res) =>
             return res.status(403).json({ ok: false, mensaje: "No tienes permiso para cancelar esta reserva." });
         }
 
-        // Si ya se cobró comisión (estado previa confirmación), realizar devolución de manera atómica
         if (reservation.comision_cobrada === 1) {
             const montoComision = reservation.total_pago * 0.10;
 
@@ -804,7 +852,6 @@ app.get("/api/owner/reservations", authenticateToken, async (req, res) => {
     }
 });
 
-// CAMBIO DE ESTADO DE RESERVA POR EL PROPIETARIO - REGLA 4 Y 5: COBRO ATÓMICO DE COMISIÓN DEL 10%
 app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, res) => {
     const { estado } = req.body;
     const reservationId = req.params.id;
@@ -826,7 +873,6 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
             return res.status(403).json({ ok: false, mensaje: "No estás autorizado para modificar el estado de esta reserva." });
         }
 
-        // LÓGICA DE COBRO AL CONFIRMAR LA RESERVA
         if (estado === "confirmada" && reservation.estado !== "confirmada") {
             const cartera = await obtenerOCrearCartera(req.user.id);
             const montoComision = reservation.total_pago * 0.10;
@@ -845,7 +891,6 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
                 });
             }
 
-            // Operación Atómica en DB 1 y actualización en DB 2
             await usersDb.run("BEGIN TRANSACTION");
             const nuevoSaldo = cartera.saldo - montoComision;
 
