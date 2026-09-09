@@ -54,8 +54,7 @@ function actualizarNavAutenticacion() {
         container.innerHTML = "";
     } else {
         container.innerHTML = `
-            <a href="/html/login.html" class="btn btn-secondary">Iniciar sesión</a>
-            <a href="/html/register.html" class="btn btn-primary">Registrarse</a>
+            <a href="/html/register.html" class="btn btn-secondary">Registrarse</a>
         `;
     }
 }

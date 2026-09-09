@@ -16,10 +16,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // =================================================
 
     const loginForm = document.getElementById("loginForm");
-    const registerForm = document.getElementById("registerForm");
     const mensaje = document.getElementById("mensaje");
     const btnLogin = document.getElementById("btnLogin");
-    const btnRegister = document.getElementById("btnRegister");
 
     // =================================================
     // COMPROBAR ELEMENTOS
@@ -30,9 +28,15 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
     }
 
-    if (!registerForm) {
-        console.error("No se encontró #registerForm");
-        return;
+    // Cargar correo si viene redireccionado del registro
+    const urlParams = new URLSearchParams(window.location.search);
+    const correoRegistrado = urlParams.get("correo");
+    if (correoRegistrado) {
+        const loginCorreoInput = document.getElementById("loginCorreo");
+        if (loginCorreoInput) {
+            loginCorreoInput.value = correoRegistrado;
+            mostrarMensaje("Cuenta creada exitosamente. Ingresa tu contraseña para iniciar sesión.", "success");
+        }
     }
 
     // =================================================
@@ -72,21 +76,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // =================================================
-    // CAMBIAR ESTADO DEL BOTÓN REGISTRO
-    // =================================================
-
-    function cambiarEstadoRegistro(cargando) {
-        if (!btnRegister) return;
-        btnRegister.disabled = cargando;
-        if (cargando) {
-            btnRegister.dataset.textoOriginal = btnRegister.textContent;
-            btnRegister.textContent = "Creando cuenta...";
-        } else {
-            btnRegister.textContent = btnRegister.dataset.textoOriginal || "Crear Cuenta";
-        }
-    }
-
-    // =================================================
     // LOGIN
     // =================================================
 
@@ -111,7 +100,6 @@ document.addEventListener("DOMContentLoaded", () => {
         cambiarEstadoLogin(true);
 
         try {
-            // Se corrigió el endpoint: /api/login en lugar de /api/auth/login
             const response = await fetch(`${API_URL}/login`, {
                 method: "POST",
                 headers: {
@@ -157,94 +145,6 @@ document.addEventListener("DOMContentLoaded", () => {
             );
         } finally {
             cambiarEstadoLogin(false);
-        }
-    });
-
-    // =================================================
-    // REGISTRO
-    // =================================================
-
-    registerForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        console.log("Formulario de registro enviado.");
-        ocultarMensaje();
-
-        const nombre = document.getElementById("registerNombre").value.trim();
-        const correo = document.getElementById("registerCorreo").value.trim().toLowerCase();
-        const password = document.getElementById("registerPassword").value;
-
-        if (!nombre) {
-            mostrarMensaje("Ingresa tu nombre.");
-            return;
-        }
-
-        if (!correo) {
-            mostrarMensaje("Ingresa tu correo electrónico.");
-            return;
-        }
-
-        if (!password) {
-            mostrarMensaje("Ingresa una contraseña.");
-            return;
-        }
-
-        if (password.length < 6) {
-            mostrarMensaje("La contraseña debe tener mínimo 6 caracteres.");
-            return;
-        }
-
-        cambiarEstadoRegistro(true);
-
-        try {
-            // Se corrigió el endpoint: /api/register en lugar de /api/auth/register
-            const response = await fetch(`${API_URL}/register`, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({ nombre, correo, password })
-            });
-
-            const data = await response.json();
-            console.log("Respuesta registro:", data);
-
-            if ((response.status === 200 || response.status === 201) && data.ok) {
-                mostrarMensaje(
-                    "Cuenta creada correctamente. Ahora puedes iniciar sesión.",
-                    "success"
-                );
-
-                registerForm.reset();
-
-                const loginCorreo = document.getElementById("loginCorreo");
-                if (loginCorreo) {
-                    loginCorreo.value = correo;
-                }
-
-                setTimeout(() => {
-                    const loginPassword = document.getElementById("loginPassword");
-                    if (loginPassword) {
-                        loginPassword.focus();
-                    }
-                }, 300);
-
-                return;
-            }
-
-            if (response.status === 400) {
-                mostrarMensaje(data.mensaje || "El correo electrónico ya está registrado o faltan datos.");
-                return;
-            }
-
-            mostrarMensaje(data.mensaje || "No se pudo crear la cuenta.");
-
-        } catch (error) {
-            console.error("Error registrando usuario:", error);
-            mostrarMensaje(
-                "No se pudo conectar con el servidor. Verifica que MasterDriver esté ejecutándose."
-            );
-        } finally {
-            cambiarEstadoRegistro(false);
         }
     });
 
