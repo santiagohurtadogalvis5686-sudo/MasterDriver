@@ -587,11 +587,11 @@ async function cargarReservas() {
                     ${
                         sePuedeEditar
                             ? `
-                                <div id="form-edit-${reservation.id}" class="edit-reservation-form" hidden style="margin-top: 10px; padding: 10px; border-top: 1px solid #ccc; background-color: #f8f9fa; border-radius: 6px;">
-                                    <label style="display: block; font-weight: bold; margin-bottom: 5px;">Nueva fecha/hora inicio:
+                                <div id="form-edit-${reservation.id}" class="edit-reservation-form" hidden style="margin-top: 10px; padding: 15px; border-top: 1px solid #333; background-color: transparent; border-radius: 6px;">
+                                    <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #aaa;">Nueva fecha/hora inicio:
                                         <input type="datetime-local" id="edit-inicio-${reservation.id}" class="form-control" value="${reservation.fecha_inicio ? reservation.fecha_inicio.slice(0, 16) : ''}" onchange="calcularNuevoTotalEdicion(${reservation.id}, ${precioPorHora})" style="width: 100%; margin-top: 3px;">
                                     </label>
-                                    <label style="display: block; font-weight: bold; margin-bottom: 5px; margin-top: 8px;">Nueva fecha/hora fin:
+                                    <label style="display: block; font-weight: bold; margin-bottom: 5px; margin-top: 8px; color: #aaa;">Nueva fecha/hora fin:
                                         <input type="datetime-local" id="edit-fin-${reservation.id}" class="form-control" value="${reservation.fecha_fin ? reservation.fecha_fin.slice(0, 16) : ''}" onchange="calcularNuevoTotalEdicion(${reservation.id}, ${precioPorHora})" style="width: 100%; margin-top: 3px;">
                                     </label>
                                     <p id="edit-total-preview-${reservation.id}" style="font-weight: bold; color: #2b6cb0; margin-top: 10px; font-size: 1rem;">
@@ -759,7 +759,7 @@ async function guardarEdicionReserva(reservationId) {
             return;
         }
 
-        mostrarNotificacion("Reserva actualizada con éxito.", "success");
+        mostrarNotificacion("Las fechas y horas se editaron satisfactoriamente.", "success");
         await cargarReservas();
     } catch (error) {
         console.error("Error al editar reserva:", error);

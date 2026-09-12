@@ -153,10 +153,32 @@ async function initializeDatabase() {
             }
         }
 
-        // Asignar CURRENT_TIMESTAMP a los registros que tengan valores NULL
+        // Migración 4: Agregar columna comision_cobrada a reservations
+        try {
+            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN comision_cobrada INTEGER DEFAULT 0");
+            console.log("Migración exitosa: columna 'comision_cobrada' añadida a 'reservations'.");
+        } catch (mError) {
+            if (!mError.message.includes("duplicate column name")) {
+                console.warn("Nota de migración 'comision_cobrada' en reservations:", mError.message);
+            }
+        }
+
+        // Migración 5: Agregar columna editado_por_cliente a reservations
+        try {
+            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN editado_por_cliente INTEGER DEFAULT 0");
+            console.log("Migración exitosa: columna 'editado_por_cliente' añadida a 'reservations'.");
+        } catch (mError) {
+            if (!mError.message.includes("duplicate column name")) {
+                console.warn("Nota de migración 'editado_por_cliente' en reservations:", mError.message);
+            }
+        }
+
+        // Asignar CURRENT_TIMESTAMP y 0 a los registros que tengan valores NULL
         await vehiclesDb.run("UPDATE vehicles SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
         await vehiclesDb.run("UPDATE reservations SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
         await vehiclesDb.run("UPDATE reservations SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL");
+        await vehiclesDb.run("UPDATE reservations SET comision_cobrada = 0 WHERE comision_cobrada IS NULL");
+        await vehiclesDb.run("UPDATE reservations SET editado_por_cliente = 0 WHERE editado_por_cliente IS NULL");
 
     } catch (error) {
         console.error("Error al inicializar las bases de datos:", error);

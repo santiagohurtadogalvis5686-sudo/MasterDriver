@@ -655,8 +655,8 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
         }
 
         const result = await vehiclesDb.run(
-            `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado, created_at, updated_at) 
-             VALUES (?, ?, ?, ?, ?, 'pendiente', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado, comision_cobrada, editado_por_cliente, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, 'pendiente', 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
             [req.user.id, vehicle_id, fecha_inicio, fecha_fin, parseFloat(total_pago)]
         );
 
@@ -936,34 +936,37 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
                 });
             }
 
-            if (cartera.saldo < montoComision) {
-                return res.status(400).json({
-                    ok: false,
-                    mensaje: `Saldo insuficiente para cubrir la comisión del 10% ($${montoComision.toLocaleString("es-CO")} COP).`
-                });
+            if (reservation.comision_cobrada !== 1) {
+                if (cartera.saldo < montoComision) {
+                    return res.status(400).json({
+                        ok: false,
+                        mensaje: `Saldo insuficiente para cubrir la comisión del 10% ($${montoComision.toLocaleString("es-CO")} COP).`
+                    });
+                }
+
+                await usersDb.run("BEGIN TRANSACTION");
+                const nuevoSaldo = cartera.saldo - montoComision;
+
+                await usersDb.run(
+                    "UPDATE wallets SET saldo = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+                    [nuevoSaldo, req.user.id]
+                );
+
+                await usersDb.run(
+                    `INSERT INTO wallet_transactions (user_id, tipo, monto, saldo_resultante, descripcion, reservation_id) 
+                     VALUES (?, 'comision', ?, ?, ?, ?)`,
+                    [
+                        req.user.id,
+                        montoComision,
+                        nuevoSaldo,
+                        `Comisión por reserva #${reservation.id}`,
+                        reservation.id
+                    ]
+                );
+
+                await usersDb.run("COMMIT");
             }
 
-            await usersDb.run("BEGIN TRANSACTION");
-            const nuevoSaldo = cartera.saldo - montoComision;
-
-            await usersDb.run(
-                "UPDATE wallets SET saldo = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                [nuevoSaldo, req.user.id]
-            );
-
-            await usersDb.run(
-                `INSERT INTO wallet_transactions (user_id, tipo, monto, saldo_resultante, descripcion, reservation_id) 
-                 VALUES (?, 'comision', ?, ?, ?, ?)`,
-                [
-                    req.user.id,
-                    montoComision,
-                    nuevoSaldo,
-                    `Comisión por reserva #${reservation.id}`,
-                    reservation.id
-                ]
-            );
-
-            await usersDb.run("COMMIT");
             await vehiclesDb.run(
                 "UPDATE reservations SET estado = 'confirmada', comision_cobrada = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                 [reservationId]
