@@ -114,24 +114,6 @@ function crearTarjetaVehiculo(vehicle) {
         ? fotos[0]
         : "https://via.placeholder.com/500x300?text=Sin+imagen";
 
-    const whatsapp = vehicle.whatsapp
-        ? vehicle.whatsapp.replace(/[^0-9]/g, "")
-        : "";
-
-    const whatsappLink = whatsapp
-        ? `
-            <a
-                href="https://wa.me/${whatsapp}"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="btn btn-secondary btn-full"
-                style="margin-top: 8px;"
-            >
-                Contactar por WhatsApp
-            </a>
-        `
-        : "";
-
     const precio = Number(vehicle.precio) || 0;
 
     card.innerHTML = `
@@ -165,8 +147,6 @@ function crearTarjetaVehiculo(vehicle) {
             >
                 Reservar
             </button>
-
-            ${whatsappLink}
         </div>
     `;
 

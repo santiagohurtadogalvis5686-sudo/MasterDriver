@@ -95,7 +95,22 @@ const uploadVehicles = multer({
     }
 });
 
-// Middleware de autenticación JWT (Usa Base de Datos 1 - usersDb)
+// Helper de limpieza para reservas rechazadas con más de 3 minutos (180s)
+async function purgarReservasRechazadas() {
+    try {
+        await vehiclesDb.run(
+            `DELETE FROM reservations 
+             WHERE LOWER(estado) = 'rechazada' 
+               AND (
+                 strftime('%s', 'now') - strftime('%s', COALESCE(updated_at, created_at, CURRENT_TIMESTAMP))
+               ) >= 180`
+        );
+    } catch (error) {
+        console.error("Error al purgar reservas rechazadas:", error);
+    }
+}
+
+// Middleware de autenticación JWT
 function authenticateToken(req, res, next) {
     const authHeader = req.headers["authorization"];
     const token = authHeader && authHeader.split(" ")[1];
@@ -188,7 +203,6 @@ app.post("/api/register", async (req, res) => {
             [nombre, correo, password, telefono || ""]
         );
 
-        // Inicializar cartera en 0 al registrar
         await usersDb.run("INSERT INTO wallets (user_id, saldo) VALUES (?, 0.0)", [result.lastID]);
 
         const token = jwt.sign({ id: result.lastID, correo }, JWT_SECRET, { expiresIn: "24h" });
@@ -406,7 +420,6 @@ app.post("/api/wallet/recharge", authenticateToken, async (req, res) => {
     }
 });
 
-// 1. ELIMINAR UN REGISTRO ESPECÍFICO DEL HISTORIAL POR ID Y USER_ID
 app.delete("/api/wallet/transactions/:id", authenticateToken, async (req, res) => {
     const transactionId = req.params.id;
 
@@ -442,7 +455,6 @@ app.delete("/api/wallet/transactions/:id", authenticateToken, async (req, res) =
     }
 });
 
-// 2. ELIMINAR TODO EL HISTORIAL DE CARTERA DEL USUARIO AUTENTICADO
 app.delete("/api/wallet/transactions", authenticateToken, async (req, res) => {
     try {
         const result = await usersDb.run(
@@ -480,11 +492,6 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
             precio,
             whatsapp,
             descripcion,
-            disponibilidad_hora_inicio,
-            disponibilidad_hora_fin,
-            dias_disponibles,
-            fecha_inicio,
-            fecha_fin,
             condiciones_uso
         } = req.body;
 
@@ -518,19 +525,11 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
             tarjeta_propiedad: `/uploads/documents/${req.files["tarjeta_archivo"][0].filename}`
         };
 
-        const disponibilidadJSON = JSON.stringify({
-            hora_inicio: disponibilidad_hora_inicio || "",
-            hora_fin: disponibilidad_hora_fin || "",
-            dias: dias_disponibles ? JSON.parse(dias_disponibles) : [],
-            fecha_inicio: fecha_inicio || "",
-            fecha_fin: fecha_fin || ""
-        });
-
         const result = await vehiclesDb.run(
             `INSERT INTO vehicles (
                 user_id, titulo, tipo, marca, modelo, precio, whatsapp, descripcion, 
-                fotografias, disponibilidad, documentos, condiciones_uso
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                fotografias, documentos, condiciones_uso
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 req.user.id,
                 titulo,
@@ -541,7 +540,6 @@ app.post("/api/vehicles", authenticateToken, uploadVehicles.fields([
                 whatsapp,
                 descripcion || "",
                 JSON.stringify(fotos),
-                disponibilidadJSON,
                 JSON.stringify(documentosObj),
                 condiciones_uso || "[]"
             ]
@@ -639,6 +637,8 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
     }
 
     try {
+        await purgarReservasRechazadas();
+
         const vehicle = await vehiclesDb.get("SELECT user_id FROM vehicles WHERE id = ?", [vehicle_id]);
         if (!vehicle) {
             return res.status(404).json({ ok: false, mensaje: "El vehículo seleccionado ya no está disponible." });
@@ -655,8 +655,8 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
         }
 
         const result = await vehiclesDb.run(
-            `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado) 
-             VALUES (?, ?, ?, ?, ?, 'pendiente')`,
+            `INSERT INTO reservations (user_id, vehicle_id, fecha_inicio, fecha_fin, total_pago, estado, created_at, updated_at) 
+             VALUES (?, ?, ?, ?, ?, 'pendiente', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
             [req.user.id, vehicle_id, fecha_inicio, fecha_fin, parseFloat(total_pago)]
         );
 
@@ -674,8 +674,10 @@ app.post("/api/reservations", authenticateToken, async (req, res) => {
 
 app.get("/api/reservations", authenticateToken, async (req, res) => {
     try {
+        await purgarReservasRechazadas();
+
         const reservations = await vehiclesDb.all(
-            `SELECT r.*, v.titulo, v.marca, v.modelo 
+            `SELECT r.*, v.titulo, v.marca, v.modelo, v.precio as precio_por_hora, v.whatsapp as vehicle_whatsapp, v.user_id as owner_id 
              FROM reservations r 
              JOIN vehicles v ON r.vehicle_id = v.id 
              WHERE r.user_id = ? 
@@ -685,7 +687,26 @@ app.get("/api/reservations", authenticateToken, async (req, res) => {
         );
 
         const now = new Date();
-        const activeReservations = reservations.filter(r => {
+        const enrichedReservations = await Promise.all(
+            reservations.map(async (r) => {
+                let contactoWhatsapp = "";
+                if (r.estado.toLowerCase() === "confirmada") {
+                    const owner = await usersDb.get("SELECT telefono FROM users WHERE id = ?", [r.owner_id]);
+                    contactoWhatsapp = r.vehicle_whatsapp || (owner ? owner.telefono : "");
+                }
+
+                return {
+                    ...r,
+                    contacto_whatsapp: contactoWhatsapp
+                };
+            })
+        );
+
+        const activeReservations = enrichedReservations.filter(r => {
+            const estado = (r.estado || "").toLowerCase();
+            if (estado === "rechazada") {
+                return true;
+            }
             const fechaFin = new Date(r.fecha_fin);
             return !isNaN(fechaFin.getTime()) && fechaFin > now;
         });
@@ -701,6 +722,8 @@ app.patch("/api/reservations/:id/cancel", authenticateToken, async (req, res) =>
     const reservationId = req.params.id;
 
     try {
+        await purgarReservasRechazadas();
+
         const reservation = await vehiclesDb.get(
             `SELECT r.*, v.user_id as owner_id 
              FROM reservations r 
@@ -744,7 +767,10 @@ app.patch("/api/reservations/:id/cancel", authenticateToken, async (req, res) =>
             await usersDb.run("COMMIT");
         }
 
-        await vehiclesDb.run("UPDATE reservations SET estado = 'cancelada', comision_cobrada = 0 WHERE id = ?", [reservationId]);
+        await vehiclesDb.run(
+            "UPDATE reservations SET estado = 'cancelada', comision_cobrada = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [reservationId]
+        );
 
         res.json({ ok: true, mensaje: "Reserva cancelada correctamente y comisión reembolsada si aplicaba." });
     } catch (error) {
@@ -763,8 +789,10 @@ app.put("/api/reservations/:id", authenticateToken, async (req, res) => {
     }
 
     try {
+        await purgarReservasRechazadas();
+
         const reservation = await vehiclesDb.get(
-            "SELECT id, user_id, estado FROM reservations WHERE id = ?",
+            "SELECT id, user_id, vehicle_id, estado FROM reservations WHERE id = ?",
             [reservationId]
         );
 
@@ -787,15 +815,33 @@ app.put("/api/reservations/:id", authenticateToken, async (req, res) => {
         const fin = new Date(fecha_fin);
 
         if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin <= inicio) {
-            return res.status(400).json({ ok: false, mensaje: "Rango de fechas inválido." });
+            return res.status(400).json({ ok: false, mensaje: "Rango de fechas inválido. La fecha fin debe ser posterior a la de inicio." });
         }
 
-        await vehiclesDb.run(
-            "UPDATE reservations SET fecha_inicio = ?, fecha_fin = ?, editado_por_cliente = 1 WHERE id = ?",
-            [fecha_inicio, fecha_fin, reservationId]
+        const vehicle = await vehiclesDb.get(
+            "SELECT precio FROM vehicles WHERE id = ?",
+            [reservation.vehicle_id]
         );
 
-        res.json({ ok: true, mensaje: "Reserva actualizada correctamente." });
+        if (!vehicle) {
+            return res.status(404).json({ ok: false, mensaje: "El vehículo asociado a la reserva no existe." });
+        }
+
+        const diferenciaHoras = (fin - inicio) / (1000 * 60 * 60);
+        const horas = Math.max(1, Math.ceil(diferenciaHoras));
+        const precioPorHora = Number(vehicle.precio) || 0;
+        const nuevoTotalPago = horas * precioPorHora;
+
+        await vehiclesDb.run(
+            "UPDATE reservations SET fecha_inicio = ?, fecha_fin = ?, total_pago = ?, editado_por_cliente = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [fecha_inicio, fecha_fin, nuevoTotalPago, reservationId]
+        );
+
+        res.json({ 
+            ok: true, 
+            mensaje: "Reserva actualizada correctamente.",
+            total_pago: nuevoTotalPago
+        });
     } catch (error) {
         console.error("Error al actualizar la reserva:", error);
         res.status(500).json({ ok: false, mensaje: "Error interno al actualizar la reserva." });
@@ -804,7 +850,9 @@ app.put("/api/reservations/:id", authenticateToken, async (req, res) => {
 
 app.get("/api/owner/reservations", authenticateToken, async (req, res) => {
     try {
-        const ownerVehicles = await vehiclesDb.all("SELECT id, titulo, marca, modelo FROM vehicles WHERE user_id = ?", [req.user.id]);
+        await purgarReservasRechazadas();
+
+        const ownerVehicles = await vehiclesDb.all("SELECT id, titulo, marca, modelo, whatsapp FROM vehicles WHERE user_id = ?", [req.user.id]);
         
         if (ownerVehicles.length === 0) {
             return res.json({ ok: true, reservations: [] });
@@ -833,12 +881,14 @@ app.get("/api/owner/reservations", authenticateToken, async (req, res) => {
                     estado: r.estado,
                     editado_por_cliente: r.editado_por_cliente,
                     created_at: r.created_at,
+                    updated_at: r.updated_at,
                     vehiculo_titulo: vehicle ? vehicle.titulo : "",
                     marca: vehicle ? vehicle.marca : "",
                     modelo: vehicle ? vehicle.modelo : "",
                     cliente_nombre: client ? client.nombre : "Cliente desconocido",
                     cliente_correo: client ? client.correo : "",
                     cliente_telefono: client ? client.telefono : "",
+                    contacto_whatsapp: client ? client.telefono : "",
                     cliente_licencia_frente: client && client.licencia_frente ? `/api/documents/licencia/${client.id}/frente` : null,
                     cliente_licencia_reverso: client && client.licencia_reverso ? `/api/documents/licencia/${client.id}/reverso` : null
                 };
@@ -857,6 +907,8 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
     const reservationId = req.params.id;
 
     try {
+        await purgarReservasRechazadas();
+
         const reservation = await vehiclesDb.get(
             `SELECT r.*, v.user_id as owner_id 
              FROM reservations r 
@@ -912,7 +964,10 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
             );
 
             await usersDb.run("COMMIT");
-            await vehiclesDb.run("UPDATE reservations SET estado = 'confirmada', comision_cobrada = 1 WHERE id = ?", [reservationId]);
+            await vehiclesDb.run(
+                "UPDATE reservations SET estado = 'confirmada', comision_cobrada = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                [reservationId]
+            );
 
             return res.json({
                 ok: true,
@@ -920,7 +975,10 @@ app.patch("/api/owner/reservations/:id/status", authenticateToken, async (req, r
             });
         }
 
-        await vehiclesDb.run("UPDATE reservations SET estado = ? WHERE id = ?", [estado, reservationId]);
+        await vehiclesDb.run(
+            "UPDATE reservations SET estado = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            [estado, reservationId]
+        );
         res.json({ ok: true, mensaje: "Estado de la reserva actualizado." });
 
     } catch (error) {

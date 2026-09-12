@@ -1,3 +1,5 @@
+let ownerCountdownIntervals = {};
+
 document.addEventListener(
     "DOMContentLoaded",
     iniciarMisPublicaciones
@@ -216,8 +218,14 @@ async function cargarReservasRecibidas() {
 
         const ahora = new Date();
 
-        // Filtrar reservas que NO hayan expirado en fecha + hora
         const reservations = rawReservations.filter(reservation => {
+            const estado = (reservation.estado || "").toLowerCase();
+            if (estado === "rechazada") {
+                const fechaActualizacion = new Date(reservation.updated_at || reservation.created_at);
+                const diferenciaMs = ahora - fechaActualizacion;
+                return diferenciaMs < (3 * 60 * 1000);
+            }
+
             if (!reservation.fecha_fin) return true;
 
             const fechaFin = new Date(reservation.fecha_fin);
@@ -228,6 +236,9 @@ async function cargarReservasRecibidas() {
 
             return fechaFin > ahora;
         });
+
+        Object.keys(ownerCountdownIntervals).forEach(id => clearInterval(ownerCountdownIntervals[id]));
+        ownerCountdownIntervals = {};
 
         container.innerHTML = "";
 
@@ -261,9 +272,17 @@ function crearTarjetaReserva(reservation) {
         ? `<span style="display: inline-block; background-color: #ffc107; color: #212529; font-weight: bold; font-size: 0.8rem; padding: 4px 8px; border-radius: 4px; margin-bottom: 10px;">Editado por el cliente</span>`
         : "";
 
+    const estadoReserva = (reservation.estado || "").toLowerCase();
+
     card.innerHTML = `
         ${etiquetaEditado}
         <h3>${escaparHtml(reservation.vehiculo_titulo || reservation.titulo)}</h3>
+
+        ${
+            estadoReserva === "rechazada"
+                ? `<p id="owner-timer-rechazada-${reservation.id}" style="color: #dc3545; font-weight: bold; font-size: 0.9rem; margin-bottom: 8px;"></p>`
+                : ''
+        }
 
         <p>
             Cliente:
@@ -288,9 +307,13 @@ function crearTarjetaReserva(reservation) {
 
         <p>
             Total:
-            $${total.toLocaleString("es-CO")}
+            $${total.toLocaleString("es-CO")} COP
         </p>
     `;
+
+    if (estadoReserva === "rechazada") {
+        iniciarContadorPropietarioRechazada(reservation);
+    }
 
     if (reservation.estado !== "pendiente") {
         return card;
@@ -336,6 +359,32 @@ function crearTarjetaReserva(reservation) {
     card.appendChild(actions);
 
     return card;
+}
+
+function iniciarContadorPropietarioRechazada(reservation) {
+    const timerElem = document.querySelector(`#owner-timer-rechazada-${reservation.id}`);
+    if (!timerElem) return;
+
+    const fechaRechazo = new Date(reservation.updated_at || reservation.created_at).getTime();
+    const tiempoLimite = fechaRechazo + (3 * 60 * 1000);
+
+    function actualizarTimer() {
+        const ahora = Date.now();
+        const restanteMs = tiempoLimite - ahora;
+
+        if (restanteMs <= 0) {
+            clearInterval(ownerCountdownIntervals[reservation.id]);
+            cargarReservasRecibidas();
+            return;
+        }
+
+        const minutos = Math.floor(restanteMs / 60000);
+        const segundos = Math.floor((restanteMs % 60000) / 1000);
+        timerElem.textContent = `Reserva rechazada. Se eliminará definitivamente en ${minutos}m ${segundos < 10 ? '0' : ''}${segundos}s`;
+    }
+
+    actualizarTimer();
+    ownerCountdownIntervals[reservation.id] = setInterval(actualizarTimer, 1000);
 }
 
 async function actualizarEstadoReserva(reservationId, estado) {

@@ -41,15 +41,6 @@ document.addEventListener("DOMContentLoaded", () => {
         try {
             const formData = new FormData(form);
 
-            // =================================
-            // DÍAS DISPONIBLES
-            // =================================
-            const dias = Array.from(
-                document.querySelectorAll('input[name="dias"]:checked')
-            ).map((checkbox) => checkbox.value);
-
-            formData.set("dias_disponibles", JSON.stringify(dias));
-
             // Marca de presencia de documentos en JSON metadata
             const documentosStatus = {
                 soat: true,

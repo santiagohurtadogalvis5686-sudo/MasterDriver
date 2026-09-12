@@ -1,102 +1,180 @@
 const sqlite3 = require("sqlite3").verbose();
-const fs = require("fs");
 const path = require("path");
 
-// Rutas absolutas e independientes para las dos bases de datos
-const DB_USERS_PATH = path.resolve(__dirname, "..", "database_users.db");
-const DB_VEHICLES_PATH = path.resolve(__dirname, "..", "database_vehicles.db");
-const SCHEMA_PATH = path.resolve(__dirname, "schema.sql");
+const usersDbPath = path.resolve(__dirname, "../database_users.db");
+const vehiclesDbPath = path.resolve(__dirname, "../masterdriver.db");
 
-// Instancias independientes de conexión SQLite
-const dbUsers = new sqlite3.Database(DB_USERS_PATH, (err) => {
-    if (err) console.error("Error conectando con DB Users:", err.message);
-});
+function connectDb(dbPath) {
+    return new sqlite3.Database(dbPath);
+}
 
-const dbVehicles = new sqlite3.Database(DB_VEHICLES_PATH, (err) => {
-    if (err) console.error("Error conectando con DB Vehicles:", err.message);
-});
+const usersDbRaw = connectDb(usersDbPath);
+const vehiclesDbRaw = connectDb(vehiclesDbPath);
 
-// Helper generador de Promesas para una instancia SQLite
-function createQueryHelpers(dbInstance) {
+// Helper para convertir callbacks de sqlite3 a Promises
+function promisifyDb(db) {
     return {
-        run: (sql, params = []) => new Promise((resolve, reject) => {
-            dbInstance.run(sql, params, function (err) {
-                if (err) return reject(err);
-                resolve({ lastID: this.lastID, changes: this.changes });
+        run: (sql, params = []) => {
+            return new Promise((resolve, reject) => {
+                db.run(sql, params, function (err) {
+                    if (err) reject(err);
+                    else resolve(this);
+                });
             });
-        }),
-        get: (sql, params = []) => new Promise((resolve, reject) => {
-            dbInstance.get(sql, params, (err, row) => {
-                if (err) return reject(err);
-                resolve(row);
+        },
+        get: (sql, params = []) => {
+            return new Promise((resolve, reject) => {
+                db.get(sql, params, (err, row) => {
+                    if (err) reject(err);
+                    else resolve(row);
+                });
             });
-        }),
-        all: (sql, params = []) => new Promise((resolve, reject) => {
-            dbInstance.all(sql, params, (err, rows) => {
-                if (err) return reject(err);
-                resolve(rows);
+        },
+        all: (sql, params = []) => {
+            return new Promise((resolve, reject) => {
+                db.all(sql, params, (err, rows) => {
+                    if (err) reject(err);
+                    else resolve(rows);
+                });
             });
-        }),
-        exec: (sql) => new Promise((resolve, reject) => {
-            dbInstance.exec(sql, (err) => {
-                if (err) return reject(err);
-                resolve();
+        },
+        exec: (sql) => {
+            return new Promise((resolve, reject) => {
+                db.exec(sql, (err) => {
+                    if (err) reject(err);
+                    else resolve();
+                });
             });
-        })
+        }
     };
 }
 
-const usersDb = createQueryHelpers(dbUsers);
-const vehiclesDb = createQueryHelpers(dbVehicles);
+const usersDb = promisifyDb(usersDbRaw);
+const vehiclesDb = promisifyDb(vehiclesDbRaw);
 
 async function initializeDatabase() {
     try {
-        console.log("Inicializando las dos bases de datos independientes...");
+        // Tablas para usuarios
+        await usersDb.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                correo TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                telefono TEXT DEFAULT '',
+                licencia_frente TEXT DEFAULT NULL,
+                licencia_reverso TEXT DEFAULT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
 
-        await usersDb.run("PRAGMA foreign_keys = ON");
-        await vehiclesDb.run("PRAGMA foreign_keys = ON");
+            CREATE TABLE IF NOT EXISTS wallets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER UNIQUE NOT NULL,
+                saldo REAL DEFAULT 0.0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
 
-        const schema = fs.readFileSync(SCHEMA_PATH, "utf8");
-        const schemaStatements = schema.split(";").filter(stmt => stmt.trim().length > 0);
+            CREATE TABLE IF NOT EXISTS wallet_transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                tipo TEXT NOT NULL,
+                monto REAL NOT NULL,
+                saldo_resultante REAL NOT NULL,
+                descripcion TEXT DEFAULT '',
+                reservation_id INTEGER DEFAULT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        `);
 
-        for (const statement of schemaStatements) {
-            const trimmed = statement.trim();
-            if (
-                trimmed.includes("users") || 
-                trimmed.includes("sessions") || 
-                trimmed.includes("wallets") || 
-                trimmed.includes("wallet_transactions") ||
-                trimmed.includes("idx_wallet")
-            ) {
-                await usersDb.exec(trimmed);
-            } else if (
-                trimmed.includes("vehicles") || 
-                trimmed.includes("reservations") || 
-                trimmed.includes("idx_")
-            ) {
-                await vehiclesDb.exec(trimmed);
+        // Tablas para vehículos y reservas
+        await vehiclesDb.exec(`
+            CREATE TABLE IF NOT EXISTS vehicles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                titulo TEXT NOT NULL,
+                tipo TEXT NOT NULL,
+                marca TEXT NOT NULL,
+                modelo TEXT NOT NULL,
+                precio REAL NOT NULL,
+                whatsapp TEXT NOT NULL,
+                descripcion TEXT DEFAULT '',
+                fotografias TEXT DEFAULT '[]',
+                documentos TEXT DEFAULT '{}',
+                condiciones_uso TEXT DEFAULT '[]',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS reservations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                vehicle_id INTEGER NOT NULL,
+                fecha_inicio TEXT NOT NULL,
+                fecha_fin TEXT NOT NULL,
+                total_pago REAL NOT NULL,
+                estado TEXT DEFAULT 'pendiente',
+                comision_cobrada INTEGER DEFAULT 0,
+                editado_por_cliente INTEGER DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+            );
+        `);
+
+        // Migración 1: Agregar columna created_at a vehicles si la tabla existente no la posee
+        try {
+            await vehiclesDb.run("ALTER TABLE vehicles ADD COLUMN created_at DATETIME");
+            console.log("Migración exitosa: columna 'created_at' añadida a 'vehicles'.");
+        } catch (mError) {
+            if (!mError.message.includes("duplicate column name")) {
+                console.warn("Nota de migración 'created_at' en vehicles:", mError.message);
             }
         }
 
-        // Migración preventiva: Garantizar columna comision_cobrada en reservations si la BD ya existía
+        // Migración 2: Agregar columna created_at a reservations
         try {
-            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN comision_cobrada INTEGER DEFAULT 0");
-        } catch (e) {
-            // La columna ya existe, ignorar error
+            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN created_at DATETIME");
+            console.log("Migración exitosa: columna 'created_at' añadida a 'reservations'.");
+        } catch (mError) {
+            if (!mError.message.includes("duplicate column name")) {
+                console.warn("Nota de migración 'created_at' en reservations:", mError.message);
+            }
         }
 
-        console.log("Bases de datos 'database_users.db' y 'database_vehicles.db' creadas/verificadas correctamente.");
+        // Migración 3: Agregar columna updated_at a reservations
+        try {
+            await vehiclesDb.run("ALTER TABLE reservations ADD COLUMN updated_at DATETIME");
+            console.log("Migración exitosa: columna 'updated_at' añadida a 'reservations'.");
+        } catch (mError) {
+            if (!mError.message.includes("duplicate column name")) {
+                console.warn("Nota de migración 'updated_at' en reservations:", mError.message);
+            }
+        }
+
+        // Asignar CURRENT_TIMESTAMP a los registros que tengan valores NULL
+        await vehiclesDb.run("UPDATE vehicles SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
+        await vehiclesDb.run("UPDATE reservations SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL");
+        await vehiclesDb.run("UPDATE reservations SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL");
+
     } catch (error) {
-        console.error("Error inicializando las bases de datos:", error);
+        console.error("Error al inicializar las bases de datos:", error);
         throw error;
     }
 }
 
+// Función helper para cerrar las conexiones limpiamente desde el seed
 function closeDatabase() {
-    return Promise.all([
-        new Promise((resolve, reject) => dbUsers.close((err) => err ? reject(err) : resolve())),
-        new Promise((resolve, reject) => dbVehicles.close((err) => err ? reject(err) : resolve()))
-    ]);
+    return new Promise((resolve) => {
+        let closed = 0;
+        const checkClosed = () => {
+            closed++;
+            if (closed === 2) resolve();
+        };
+        usersDbRaw.close(checkClosed);
+        vehiclesDbRaw.close(checkClosed);
+    });
 }
 
 module.exports = {

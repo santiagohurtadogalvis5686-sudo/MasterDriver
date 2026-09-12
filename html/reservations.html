@@ -31,8 +31,8 @@
     </nav>
 
     <button id="logoutButton" class="btn btn-primary" type="button">
-    Cerrar sesión
-</button>
+        Cerrar sesión
+    </button>
 
 </header>
 
@@ -85,27 +85,43 @@
             <h2>Confirmar reserva</h2>
         </div>
 
-        <p id="selectedVehicleInfo"></p>
+        <p id="selectedVehicleInfo" style="font-weight: bold; font-size: 1.1rem; color: #333;"></p>
 
-        <p id="selectedAvailability"></p>
+        <div style="margin: 15px 0; display: flex; flex-direction: column; gap: 12px; max-width: 400px;">
+            <label style="display: flex; flex-direction: column; gap: 5px; font-weight: bold;">
+                Fecha y Hora de Inicio:
+                <input type="datetime-local" id="clientFechaInicio" class="form-control" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            </label>
 
-        <p id="reservationTotal">
-            Total estimado: $0
+            <label style="display: flex; flex-direction: column; gap: 5px; font-weight: bold;">
+                Fecha y Hora de Fin:
+                <input type="datetime-local" id="clientFechaFin" class="form-control" style="padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+            </label>
+        </div>
+
+        <p id="reservationTotal" style="font-size: 1.2rem; font-weight: bold; color: #2b6cb0;">
+            Total estimado: $0 COP
         </p>
 
         <p id="reservationFormMessage"></p>
 
-        <button
-            id="confirmReservationButton"
-            class="btn btn-primary"
-            type="button"
-        >
-            Confirmar reserva
-        </button>
+        <div style="display: flex; gap: 10px; margin-top: 15px;">
+            <button
+                id="confirmReservationButton"
+                class="btn btn-primary"
+                type="button"
+            >
+                Confirmar reserva
+            </button>
 
-        <a href="/html/catalog.html" class="btn btn-secondary">
-            Cancelar
-        </a>
+            <button
+                id="cancelFormButton"
+                type="button"
+                class="btn btn-secondary"
+            >
+                Cancelar
+            </button>
+        </div>
 
     </section>
 
